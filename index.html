@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Play MUME!</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/main.css" />
+    <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/mud-colors.css" />
+    <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/decafmud.css" />
+    <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/decafmud-dark.css" />
+    <script type="text/javascript">
+        var globalErrorHandlerWasHit = false;
+
+        // Log the error in the Apache logs with a dummy URL
+        window.onerror = function (msg, file_loc, line_no, col_no) {
+            col_no = (typeof col_no === "undefined") ? "" : col_no;
+            var url = '/mume/play/jserror'
+                + '?at=' + encodeURIComponent(file_loc + ":" + line_no + ":" + col_no)
+                + "&msg=" + encodeURIComponent(msg);
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.send(null);
+            if (!globalErrorHandlerWasHit) {
+                alert("Oops! Something went really wrong.\n"
+                    +"\n"
+                    +"Please make sure that you are using a supported browser "
+                    +"(up-to-date Chrome or Firefox; IE 10 and later).\n"
+                    +"\n"
+                    +"For other cases: the error was logged and will hopefully be fixed... "
+                    +"Nag Waba if he didn't notice it!\n"
+                    +"\n"
+                    +"Technical details: " + msg);
+            }
+            globalErrorHandlerWasHit = true;
+            return false;
+        }
+    </script>
+    <script src="../DecafMUD/src/js/decafmud.js" type="text/javascript"></script>
+    <script src="../DecafMUD/src/js/decafmud.display.standard.js" type="text/javascript"></script>
+    <script src="../DecafMUD/src/js/decafmud.encoding.iso885915.js" type="text/javascript"></script>
+    <script src="../DecafMUD/src/js/decafmud.socket.websocket.js" type="text/javascript"></script>
+    <script src="../DecafMUD/src/js/decafmud.storage.standard.js" type="text/javascript"></script>
+    <script src="../DecafMUD/src/js/decafmud.interface.panels.js" type="text/javascript"></script>
+    <script src="../DecafMUD/src/js/decafmud.interface.panels.menu.js" type="text/javascript"></script>
+    <script src="../DecafMUD/src/js/decafmud.interface.panels.settings.js" type="text/javascript"></script>
+    <script src="../DecafMUD/src/js/dragelement.js" type="text/javascript"></script>
+    <script src="mume.macros.js" type="text/javascript"></script>
+    <script type="text/javascript">
+        window.onload = function() {
+            new DecafMUD({
+                host: "test.waba.be",
+                port: 443,
+                autoreconnect	: false,
+
+                // Socket Settings
+                set_socket              : {
+                    // Flash Specific
+                    policyport      : undefined, // Undefined = 843
+                    swf             : '../DecafMUD/src/flash/DecafMUDFlashSocket.swf',
+
+                    // WebSocket Specific
+                    wsport          : 443,
+                    wspath          : '/mume/play/websocket',
+                    ssl             : true
+                },
+
+                interface           : 'panels',
+                set_interface   : {
+                    container    : "#mume-client",
+                    connect_hint : false,
+                    repeat_input : false,
+                    start_full   : true
+                },
+
+                language : 'en', // circumvent the language buggy autoloader
+
+                socket: "websocket"
+
+            });
+        };
+    </script>
+</head>
+<body>
+    <div id="mume-client">
+        <noscript>You would be able to play MUME from within your browser if you had Javascript enabled.</noscript>
+    </div>
+</body>
+</html>
