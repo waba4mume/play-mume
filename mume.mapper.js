@@ -1,8 +1,10 @@
+var MumeMap;
+
 (function() {
 'use strict';
 
-var loadMap, mapData, mapDataDescIndex, indexRooms, findRoomByNameDesc,
-    buildRoomDisplay, getSectorAssetPath, openMapWindow, globalMapWindow,
+var loadMap, hardcodedMapData, getSectorAssetPath, buildRoomDisplay,
+    getAllAssetPaths,
     ROOM_PIXELS = 48,
     // Indexes into mapData entries (using an array because it may be more
     // efficient to store the whole map).
@@ -38,36 +40,51 @@ var loadMap, mapData, mapDataDescIndex, indexRooms, findRoomByNameDesc,
     SECT_TUNNEL         = 13,
     SECT_CAVERN         = 14,
     SECT_DEATHTRAP      = 15, // in MUME it's actually a flag
-    XXX;
+    SECT_COUNT = SECT_DEATHTRAP;
+
+MumeMap = function( containerElementName_ )
+{
+    this.mapData = hardcodedMapData;
+    this.mapDataDescIndex = null;
+    this.containerElementName = containerElementName_;
+}
 
 // Uses the JS builtin hash to index rooms.
 // Should be fast, but memory-hungry. We might load only a pre-computed
 // hash of the room to save memory later. To be tested.
-indexRooms = function()
+MumeMap.prototype.indexRooms = function()
 {
-    mapDataDescIndex = {};
+    this.mapDataDescIndex = {};
 
     var i;
-    for ( i = 0; i < mapData.length; ++i )
+    for ( i = 0; i < this.mapData.length; ++i )
     {
         var key, room;
-        room = mapData[i];
+        room = this.mapData[i];
         key = room[MD_NAME] + "\n" + room[MD_DESC];
-        mapDataDescIndex[key] = i;
+        this.mapDataDescIndex[key] = i;
     }
 }
 
 // Returns ID or undefined
-findRoomByNameDesc = function( name, desc )
+MumeMap.prototype.findRoomByNameDesc = function( name, desc )
 {
     var num;
-    num = mapDataDescIndex[name + "\n" + desc];
+    num = this.mapDataDescIndex[name + "\n" + desc];
     return num;
 }
 
 getSectorAssetPath = function( sector )
 {
     return "resources/pixmaps/terrain" + sector + ".png";
+}
+
+getAllAssetPaths = function()
+{
+    var i, paths = [];
+    for ( i = SECT_UNDEFINED; i < SECT_COUNT; ++i )
+        paths.push( getSectorAssetPath( i ) );
+    return paths;
 }
 
 buildRoomDisplay = function( room )
@@ -107,11 +124,11 @@ buildRoomDisplay = function( room )
     return display;
 }
 
+/* Not used currently - update, reenable and hook it to some GUI element to
+ * open the map window.
 openMapWindow = function()
 {
     var mapWindow;
-
-    indexRooms();
 
     // Open a new window and make really sure it's blank
     mapWindow = window.open( "map.html", "mume-map", "dialog,minimizable,width=820,height=620" );
@@ -129,43 +146,52 @@ openMapWindow = function()
     else
         mapWindow.addEventListener( "load", loadMap );
 }
+*/
 
-loadMap = function()
+MumeMap.prototype.loadMap = function()
 {
-    var renderer, stage, layer0, animate;
+    var renderer, stage, animate, stub, loader;
+
+    this.indexRooms();
 
     // Set the Pixi viewport as the content of that new window
+    stage = new PIXI.Stage( 0x6e6e6e );
+    animate = function() {
+        requestAnimationFrame( animate );
+        renderer.render( stage );
+    };
     renderer = PIXI.autoDetectRenderer( 800, 600 );
-    if ( globalMapWindow.document.getElementById( "map" ) )
-        globalMapWindow.document.body.replaceChild(
-            renderer.view,
-            globalMapWindow.document.getElementById( "map" ) );
-    else
-        globalMapWindow.document.body.appendChild( renderer.view );
+    stub = document.querySelector( this.containerElementName );
+    stub.parentElement.replaceChild( renderer.view, stub );
     renderer.view.id = "map";
+    requestAnimationFrame( animate );
+
+    // Start loading assets
+    loader = new PIXI.AssetLoader( getAllAssetPaths() );
+    loader.onComplete = this.buildMapDisplay.bind( this, stage );
+    loader.load();
+
+    return;
+}
+
+MumeMap.prototype.buildMapDisplay = function( stage )
+{
+    var layer0;
 
     // Add the rooms to a base layer (later we'll need more layers)
     layer0 = new PIXI.DisplayObjectContainer();
-    mapData.forEach( function( room )
+    this.mapData.forEach( function( room )
     {
         layer0.addChild( buildRoomDisplay( room ) );
     } );
 
     // And set the stage
-    stage = new PIXI.Stage( 0x6e6e6e );
     stage.addChild( layer0 );
-    animate = function() {
-        globalMapWindow.requestAnimationFrame( animate );
-        renderer.render( stage );
-    };
-    globalMapWindow.requestAnimationFrame( animate );
 
     return;
 }
 
-window.addEventListener( "load", openMapWindow );
-
-mapData = [
+hardcodedMapData = [
     /* 0 */ [
         5, 5, 0, null, 1, null, null, null, null,
         SECT_CITY, 0, 0, null, null,
