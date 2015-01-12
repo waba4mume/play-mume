@@ -4,7 +4,7 @@ var MumeMap;
 'use strict';
 
 var loadMap, hardcodedMapData, getSectorAssetPath, buildRoomDisplay,
-    getAllAssetPaths,
+    getAllAssetPaths, buildHerePointer,
     ROOM_PIXELS = 48,
     // Indexes into mapData entries (using an array because it may be more
     // efficient to store the whole map).
@@ -47,6 +47,7 @@ MumeMap = function( containerElementName_ )
     this.mapData = hardcodedMapData;
     this.mapDataDescIndex = null;
     this.containerElementName = containerElementName_;
+    this.herePointer = null;
 }
 
 // Uses the JS builtin hash to index rooms.
@@ -100,7 +101,7 @@ buildRoomDisplay = function( room )
 
     // Draw the borders
     borders = new PIXI.Graphics();
-    borders.lineStyle( 1, 0x000000, 1 );
+    borders.lineStyle( 2, 0x000000, 1 );
 
     [   // direction MD entry, start coords, end coords
         [ MD_NORTH, 0, 0, ROOM_PIXELS, 0 ],
@@ -122,6 +123,31 @@ buildRoomDisplay = function( room )
 
     display.cacheAsBitmap = true;
     return display;
+}
+
+buildHerePointer = function()
+{
+    var square, size, offset;
+
+    size = ROOM_PIXELS * 1.4;
+    offset = ( size - ROOM_PIXELS ) / 2;
+
+    square = new PIXI.Graphics();
+    square.lineStyle( 2, 0xFFFF00, 1 );
+    square.drawRect( -offset, -offset, size, size );
+
+    square.beginFill( 0x000000, 0.1 );
+    square.drawRect( -offset, -offset, size, size );
+    square.endFill();
+
+    return square;
+}
+
+MumeMap.prototype.repositionHere = function( rooms_x, rooms_y )
+{
+    this.herePointer.position = new PIXI.Point( rooms_x * ROOM_PIXELS, rooms_y * ROOM_PIXELS );
+
+    return;
 }
 
 /* Not used currently - update, reenable and hook it to some GUI element to
@@ -176,7 +202,11 @@ MumeMap.prototype.loadMap = function()
 
 MumeMap.prototype.buildMapDisplay = function( stage )
 {
-    var layer0;
+    var map, layer0;
+
+    // Everything belongs to the map, so we can move it around to emulate
+    // moving the viewport
+    map = new PIXI.DisplayObjectContainer();
 
     // Add the rooms to a base layer (later we'll need more layers)
     layer0 = new PIXI.DisplayObjectContainer();
@@ -184,9 +214,15 @@ MumeMap.prototype.buildMapDisplay = function( stage )
     {
         layer0.addChild( buildRoomDisplay( room ) );
     } );
+    map.addChild( layer0 );
+
+    // Add the current room yellow square
+    this.herePointer = buildHerePointer();
+    this.repositionHere( this.mapData[0][MD_X], this.mapData[0][MD_Y] );
+    map.addChild( this.herePointer );
 
     // And set the stage
-    stage.addChild( layer0 );
+    stage.addChild( map );
 
     return;
 }
