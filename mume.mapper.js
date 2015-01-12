@@ -161,9 +161,9 @@ MumeMap.prototype.loadMap = function()
         renderer.render( stage );
     };
     renderer = PIXI.autoDetectRenderer( 800, 600 );
-    stub = document.querySelector( this.containerElementName );
+    stub = document.getElementById( this.containerElementName );
     stub.parentElement.replaceChild( renderer.view, stub );
-    renderer.view.id = "map";
+    renderer.view.id = this.containerElementName;
     requestAnimationFrame( animate );
 
     // Start loading assets
