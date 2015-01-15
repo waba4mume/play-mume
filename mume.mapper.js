@@ -1,4 +1,4 @@
-var MumeMap;
+var MumeMap, MumeXmlParser;
 
 (function() {
 'use strict';
@@ -41,6 +41,10 @@ var loadMap, hardcodedMapData, getSectorAssetPath, buildRoomDisplay,
     SECT_CAVERN         = 14,
     SECT_DEATHTRAP      = 15, // in MUME it's actually a flag
     SECT_COUNT = SECT_DEATHTRAP;
+
+
+
+
 
 MumeMap = function( containerElementName_ )
 {
@@ -252,5 +256,207 @@ hardcodedMapData = [
         +"the deeper parts of the Dwarven caves."
     ]
 ];
+
+
+
+
+
+/* Filters out the XML-like tags that MUME can send in "XML mode", and sends
+ * them as events instead.
+ *
+ * Sample input:
+ * <xml>XML mode is now on.
+ * <prompt>!f- CW&gt;</prompt>f
+ * You flee head over heels.
+ * You flee north.
+ * <movement dir=north/>
+ * <room><name>A Flat Marsh</name>
+ * <description>The few, low patches of tangled rushes add a clear tone to the otherwise sombre
+ * colour of this flat marshland. Some puddles are scattered behind them, where
+ * there are many pebbles of varying sizes. Most of these pebbles have been
+ * covered by a thin layer of dark, green moss.
+ * </description>A large green shrub grows in the middle of a large pool of mud.
+ * </room><exits>Exits: north, east, south.
+ * </exits>
+ * <prompt>!%- CW&gt;</prompt>cha xml off
+ * </xml>XML mode is now off.
+ *
+ * Matching event output:
+ * { name: "prompt",      attr: "",          text: "!f- CW>" }
+ * { name: "movement",    attr: "dir=north", text: "" }
+ * { name: "name",        attr: "",          text: "A Flat Marsh" }
+ * { name: "description", attr: "",          text: "The few... sombre\n...moss.\n" }
+ * { name: "room",        attr: "",          text: "A large green...mud.\n" }
+ * { name: "exits",       attr: "",          text: "Exits: north, east, south.\n" }
+ * { name: "prompt",      attr: "",          text: "!%- CW>" }
+ * { name: "xml",         attr: "",          text: "" }
+ *
+ * Tag hierarchy does not carry a lot of meaning and is not conveyed in the
+ * events sent. The text of the XML is always empty as it would be useless but
+ * grow huge over the course of the session.
+ *
+ * At the time of writing, MUME emits at most 1 attribute for tags encountered
+ * during mortal sessions, and never quotes it.
+ *
+ * One registers to events by calling:
+ * parser.on( "tagend", function( tag ) { /* Use tag.name etc here *./ } );
+ */
+MumeXmlParser = function()
+{
+    this.tagStack = [];
+    this.plainText = "";
+
+    contra.emitter( this );
+}
+
+MumeXmlParser.prototype.topTag = function()
+{
+    if ( this.tagStack.length == 0 )
+        return undefined;
+    else
+        return this.tagStack[ this.tagStack.length - 1 ];
+}
+
+MumeXmlParser.prototype.resetPlainText = function()
+{
+    var plainText;
+
+    plainText = this.plainText;
+    this.plainText = "";
+
+    return plainText;
+}
+
+/* Matches a start or end tag and captures the following:
+ * 1. any text preceeding the tag
+ * 2. "/" if this is an end tag
+ * 3. tag name
+ * 4. any attributes
+ * 5. "/" if this is a leaf tag (IOW, no end tag will follow).
+ * 6. any text following the tag
+ *
+ * Pardon the write-only RE, JavaScript doesn't have /x.
+ */
+MumeXmlParser.TAG_RE = /([^<]*)<(\/?)(\w+)(?: ([^/>]+))?(\/?)>([^<]*)/g;
+
+MumeXmlParser.decodeEntities = function( text )
+{
+    var decodedText;
+
+    decodedText = text
+        .replace( /&lt;/g, "<" )
+        .replace( /&gt;/g, ">" )
+        .replace( /&amp;/g, "&" );
+
+    return decodedText;
+}
+
+/* Takes text with pseudo-XML as input, returns plain text and emits events.
+ */
+MumeXmlParser.prototype.filterInput = function( input )
+{
+    var matches, isEnd, isLeaf, tagName, attr, textBefore, textAfter;
+
+    while ( ( matches = re.exec( input ) ) !== null )
+    {
+        textBefore = matches[1];
+        isEnd      = matches[2];
+        tagName    = matches[3];
+        attr       = matches[4];
+        isLeaf     = matches[5];
+        textAfter  = matches[6];
+
+        if ( textBefore )
+        {
+            this.pushText( textBefore );
+        }
+
+        if ( isLeaf )
+        {
+            this.startTag( tagName, attr );
+            this.endTag( tagName );
+        }
+        else if ( isEnd )
+        {
+            this.endTag( tagName );
+        }
+        else
+        {
+            this.startTag( tagName, attr );
+        }
+
+        if ( textAfter )
+        {
+            this.pushText( textAfter );
+        }
+    }
+
+    return MumeXmlParser.decodeEntities( this.resetPlainText() );
+}
+
+MumeXmlParser.prototype.pushText = function( text )
+{
+    var topTag, error;
+
+    topTag = this.topTag();
+
+    if ( !topTag || topTag.name === "xml" )
+    {
+        this.plainText += text;
+    }
+    else if ( topTag.text.length > 4096 )
+    {
+        error = "Probable bug: run-away MumeXmlParser tag " + topTag.name
+            + ", text: " + topTag.text.substr( 0, 50 );
+        this.tagStack.pop();
+        throw error;
+    }
+    else
+    {
+        topTag.text += text;
+    }
+}
+
+MumeXmlParser.prototype.startTag = function( tagName, attr )
+{
+    this.tagStack.push( { name: tagName, attr: attr, text: "" } );
+
+    if ( this.tagStack.length > 5 )
+        throw "Bug: deeply nested MumeXmlParser tags: "
+            + this.tagStack.join();
+
+    return;
+}
+
+MumeXmlParser.prototype.endTag = function( tagName )
+{
+    var i, matchingTagIndex, error, topTag;
+
+    // Find the uppermost tag in the stack which matches tagName
+    for ( i = this.tagStack.length - 1; i >= 0; ++i )
+    {
+        if ( this.tagStack[i].name === tagName )
+        {
+            matchingTagIndex = i;
+            break;
+        }
+    }
+
+    // Perform some sanity checks
+    if ( matchingTagIndex === undefined )
+        throw "Bug: unmatched closing MumeXmlParser tag " + tagName;
+    else if ( matchingTagIndex !== this.tagStack.length - 1 )
+    {
+        error = "Bug: closing MumeXmlParser tag " + tagName
+            + " with the following other tags open: "
+            + this.tagStack.slice( matchingTagIndex + 1 ).join();
+
+        this.tagStack = [];
+        throw error;
+    }
+
+    topTag = this.tagStack.pop();
+    this.emit( 'tagend', topTag );
+}
 
 })();
