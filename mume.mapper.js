@@ -1,10 +1,9 @@
-var MumeMap, MumeXmlParser;
+var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData;
 
 (function() {
 'use strict';
 
-var loadMap, hardcodedMapData, getSectorAssetPath, buildRoomDisplay,
-    getAllAssetPaths, buildHerePointer,
+var hardcodedMapData,
     ROOM_PIXELS = 48,
     // Indexes into mapData entries (using an array because it may be more
     // efficient to store the whole map).
@@ -46,60 +45,191 @@ var loadMap, hardcodedMapData, getSectorAssetPath, buildRoomDisplay,
 
 
 
-MumeMap = function( containerElementName_ )
+MumeMap = function( containerElementName )
 {
-    this.mapData = hardcodedMapData;
-    this.mapDataDescIndex = null;
-    this.containerElementName = containerElementName_;
-    this.herePointer = null;
+    this.mapData = new MumeMapData();
+    this.display = new MumeMapDisplay( containerElementName, this.mapData );
+}
+
+MumeMap.prototype.load = function()
+{
+    this.mapData.load();
+    this.display.loadMap();
+}
+
+/* Not used currently - update, reenable and hook it to some GUI element to
+ * open the map window.
+openMapWindow = function()
+{
+    var mapWindow;
+
+    // Open a new window and make really sure it's blank
+    mapWindow = window.open( "map.html", "mume-map", "dialog,minimizable,width=820,height=620" );
+    if ( mapWindow === null )
+    {
+        alert( "Your browser refused to open the map window, you have to allow it "
+            +"somewhere near the top right corner of your screen. Look for a "
+            +"notification about blocking popups." );
+        return;
+    }
+    console.log( "mapWindow state: ", mapWindow.document.readyState );
+    globalMapWindow = mapWindow; // Hack until I objectify this
+    if ( mapWindow.document.readyState === "complete" )
+        loadMap();
+    else
+        mapWindow.addEventListener( "load", loadMap );
+}
+*/
+
+
+
+
+
+MumeMapData = function()
+{
+    this.data = hardcodedMapData;
+    this.descIndex = null;
+}
+
+MumeMapData.prototype.load = function()
+{
+    this.indexRooms();
 }
 
 // Uses the JS builtin hash to index rooms.
 // Should be fast, but memory-hungry. We might load only a pre-computed
 // hash of the room to save memory later. To be tested.
-MumeMap.prototype.indexRooms = function()
+MumeMapData.prototype.indexRooms = function()
 {
-    this.mapDataDescIndex = {};
+    this.descIndex = {};
 
     var i;
-    for ( i = 0; i < this.mapData.length; ++i )
+    for ( i = 0; i < this.data.length; ++i )
     {
         var key, room;
-        room = this.mapData[i];
+        room = this.data[i];
         key = room[MD_NAME] + "\n" + room[MD_DESC];
-        this.mapDataDescIndex[key] = i;
+        this.descIndex[key] = i;
     }
 }
 
 // Returns ID or undefined
-MumeMap.prototype.findRoomByNameDesc = function( name, desc )
+MumeMapData.prototype.findRoomByNameDesc = function( name, desc )
 {
     var num;
-    num = this.mapDataDescIndex[name + "\n" + desc];
+    num = this.descIndex[name + "\n" + desc];
     return num;
 }
 
-getSectorAssetPath = function( sector )
+hardcodedMapData = [
+    /* 0 */ [
+        5, 5, 0, null, 1, null, null, null, null,
+        SECT_CITY, 0, 0, null, null,
+        "Fortune's Delving",
+        "A largely ceremonial hall, it was the first mineshaft that led down to what is\n"
+        +"now the second level of this Dwarven city. Dwarves hustle and bustle up and\n"
+        +"down the great staircase at whose top you now stand. Guards stand watch by the\n"
+        +"stairs, scowling at non-Dwarves, and a large sign is etched into the stone\n"
+        +"above them. It has been a long time since the eyes of Men or Elves have been\n"
+        +"welcome in the strongholds of the Dwarves, and this place is no exception."
+    ],
+    /* 1 */ [
+        6, 5, 0, null, null, null, 1, null, null,
+        SECT_INSIDE, 0, 0, null, null,
+        "Trader's Way",
+        "This wide way has been modelled as an avenue, in the style of Elves and Men. To\n"
+        +"the sides are shops selling all sorts of goods, bustling with Dwarves and the\n"
+        +"occasional Man or Elf. Between the shops bright outdoor scenes are painted and\n"
+        +"weary travellers may rest on benches along the way. On the ceiling high above\n"
+        +"can be seen a bright blue sky dotted with puffy white clouds. This part of the\n"
+        +"way is particularly busy, as it intersects the main path from the outside to\n"
+        +"the deeper parts of the Dwarven caves."
+    ]
+];
+
+
+
+
+
+MumeMapDisplay = function( containerElementName, mapData )
+{
+    this.mapData = mapData;
+    this.containerElementName = containerElementName;
+    this.herePointer = null;
+}
+
+MumeMapDisplay.prototype.loadMap = function()
+{
+    var renderer, stage, animate, stub, loader;
+
+    // Set the Pixi viewport as the content of that new window
+    stage = new PIXI.Stage( 0x6e6e6e );
+    animate = function() {
+        requestAnimationFrame( animate );
+        renderer.render( stage );
+    };
+    renderer = PIXI.autoDetectRenderer( 800, 600 );
+    stub = document.getElementById( this.containerElementName );
+    stub.parentElement.replaceChild( renderer.view, stub );
+    renderer.view.id = this.containerElementName;
+    requestAnimationFrame( animate );
+
+    // Start loading assets
+    loader = new PIXI.AssetLoader( MumeMapDisplay.getAllAssetPaths() );
+    loader.onComplete = this.buildMapDisplay.bind( this, stage );
+    loader.load();
+
+    return;
+}
+
+MumeMapDisplay.prototype.buildMapDisplay = function( stage )
+{
+    var map, layer0;
+
+    // Everything belongs to the map, so we can move it around to emulate
+    // moving the viewport
+    map = new PIXI.DisplayObjectContainer();
+
+    // Add the rooms to a base layer (later we'll need more layers)
+    layer0 = new PIXI.DisplayObjectContainer();
+    this.mapData.data.forEach( function( room )
+    {
+        layer0.addChild( MumeMapDisplay.buildRoomDisplay( room ) );
+    } );
+    map.addChild( layer0 );
+
+    // Add the current room yellow square
+    this.herePointer = MumeMapDisplay.buildHerePointer();
+    this.repositionHere( this.mapData.data[0][MD_X], this.mapData.data[0][MD_Y] );
+    map.addChild( this.herePointer );
+
+    // And set the stage
+    stage.addChild( map );
+
+    return;
+}
+
+MumeMapDisplay.getSectorAssetPath = function( sector )
 {
     return "resources/pixmaps/terrain" + sector + ".png";
 }
 
-getAllAssetPaths = function()
+MumeMapDisplay.getAllAssetPaths = function()
 {
     var i, paths = [];
     for ( i = SECT_UNDEFINED; i < SECT_COUNT; ++i )
-        paths.push( getSectorAssetPath( i ) );
+        paths.push( MumeMapDisplay.getSectorAssetPath( i ) );
     return paths;
 }
 
-buildRoomDisplay = function( room )
+MumeMapDisplay.buildRoomDisplay = function( room )
 {
     var display, sector, borders;
 
     display = new PIXI.DisplayObjectContainer();
 
     // load a PNG as background (sector type)
-    sector = PIXI.Sprite.fromImage( getSectorAssetPath( room[MD_SECTOR] ) );
+    sector = PIXI.Sprite.fromImage( MumeMapDisplay.getSectorAssetPath( room[MD_SECTOR] ) );
     sector.height = sector.width = ROOM_PIXELS; // Just in case we got a wrong PNG here
     display.addChild( sector );
 
@@ -129,7 +259,7 @@ buildRoomDisplay = function( room )
     return display;
 }
 
-buildHerePointer = function()
+MumeMapDisplay.buildHerePointer = function()
 {
     var square, size, offset;
 
@@ -147,115 +277,12 @@ buildHerePointer = function()
     return square;
 }
 
-MumeMap.prototype.repositionHere = function( rooms_x, rooms_y )
+MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
 {
     this.herePointer.position = new PIXI.Point( rooms_x * ROOM_PIXELS, rooms_y * ROOM_PIXELS );
 
     return;
 }
-
-/* Not used currently - update, reenable and hook it to some GUI element to
- * open the map window.
-openMapWindow = function()
-{
-    var mapWindow;
-
-    // Open a new window and make really sure it's blank
-    mapWindow = window.open( "map.html", "mume-map", "dialog,minimizable,width=820,height=620" );
-    if ( mapWindow === null )
-    {
-        alert( "Your browser refused to open the map window, you have to allow it "
-            +"somewhere near the top right corner of your screen. Look for a "
-            +"notification about blocking popups." );
-        return;
-    }
-    console.log( "mapWindow state: ", mapWindow.document.readyState );
-    globalMapWindow = mapWindow; // Hack until I objectify this
-    if ( mapWindow.document.readyState === "complete" )
-        loadMap();
-    else
-        mapWindow.addEventListener( "load", loadMap );
-}
-*/
-
-MumeMap.prototype.loadMap = function()
-{
-    var renderer, stage, animate, stub, loader;
-
-    this.indexRooms();
-
-    // Set the Pixi viewport as the content of that new window
-    stage = new PIXI.Stage( 0x6e6e6e );
-    animate = function() {
-        requestAnimationFrame( animate );
-        renderer.render( stage );
-    };
-    renderer = PIXI.autoDetectRenderer( 800, 600 );
-    stub = document.getElementById( this.containerElementName );
-    stub.parentElement.replaceChild( renderer.view, stub );
-    renderer.view.id = this.containerElementName;
-    requestAnimationFrame( animate );
-
-    // Start loading assets
-    loader = new PIXI.AssetLoader( getAllAssetPaths() );
-    loader.onComplete = this.buildMapDisplay.bind( this, stage );
-    loader.load();
-
-    return;
-}
-
-MumeMap.prototype.buildMapDisplay = function( stage )
-{
-    var map, layer0;
-
-    // Everything belongs to the map, so we can move it around to emulate
-    // moving the viewport
-    map = new PIXI.DisplayObjectContainer();
-
-    // Add the rooms to a base layer (later we'll need more layers)
-    layer0 = new PIXI.DisplayObjectContainer();
-    this.mapData.forEach( function( room )
-    {
-        layer0.addChild( buildRoomDisplay( room ) );
-    } );
-    map.addChild( layer0 );
-
-    // Add the current room yellow square
-    this.herePointer = buildHerePointer();
-    this.repositionHere( this.mapData[0][MD_X], this.mapData[0][MD_Y] );
-    map.addChild( this.herePointer );
-
-    // And set the stage
-    stage.addChild( map );
-
-    return;
-}
-
-hardcodedMapData = [
-    /* 0 */ [
-        5, 5, 0, null, 1, null, null, null, null,
-        SECT_CITY, 0, 0, null, null,
-        "Fortune's Delving",
-        "A largely ceremonial hall, it was the first mineshaft that led down to what is\n"
-        +"now the second level of this Dwarven city. Dwarves hustle and bustle up and\n"
-        +"down the great staircase at whose top you now stand. Guards stand watch by the\n"
-        +"stairs, scowling at non-Dwarves, and a large sign is etched into the stone\n"
-        +"above them. It has been a long time since the eyes of Men or Elves have been\n"
-        +"welcome in the strongholds of the Dwarves, and this place is no exception."
-    ],
-    /* 1 */ [
-        6, 5, 0, null, null, null, 1, null, null,
-        SECT_INSIDE, 0, 0, null, null,
-        "Trader's Way",
-        "This wide way has been modelled as an avenue, in the style of Elves and Men. To\n"
-        +"the sides are shops selling all sorts of goods, bustling with Dwarves and the\n"
-        +"occasional Man or Elf. Between the shops bright outdoor scenes are painted and\n"
-        +"weary travellers may rest on benches along the way. On the ceiling high above\n"
-        +"can be seen a bright blue sky dotted with puffy white clouds. This part of the\n"
-        +"way is particularly busy, as it intersects the main path from the outside to\n"
-        +"the deeper parts of the Dwarven caves."
-    ]
-];
 
 
 
