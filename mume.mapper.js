@@ -1,4 +1,4 @@
-var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData;
+var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumePathMachine;
 
 (function() {
 'use strict';
@@ -49,37 +49,72 @@ MumeMap = function( containerElementName )
 {
     this.mapData = new MumeMapData();
     this.display = new MumeMapDisplay( containerElementName, this.mapData );
+
+    this.pathMachine = new MumePathMachine( this.mapData );
+    this.processTag = this.pathMachine.processTag.bind( this.pathMachine );
 }
 
 MumeMap.prototype.load = function()
 {
     this.mapData.load();
     this.display.loadMap();
+
+    this.pathMachine.on( "movement", this.display.repositionHere.bind( this.display ) );
 }
 
-/* Not used currently - update, reenable and hook it to some GUI element to
- * open the map window.
-openMapWindow = function()
+
+
+
+/* Analogy to MMapper2's path machine, although ours is a currently just a
+ * naive room+desc exact search with no "path" to speak of.
+ */
+MumePathMachine = function( mapData )
 {
-    var mapWindow;
+    this.mapData = mapData;
 
-    // Open a new window and make really sure it's blank
-    mapWindow = window.open( "map.html", "mume-map", "dialog,minimizable,width=820,height=620" );
-    if ( mapWindow === null )
-    {
-        alert( "Your browser refused to open the map window, you have to allow it "
-            +"somewhere near the top right corner of your screen. Look for a "
-            +"notification about blocking popups." );
-        return;
-    }
-    console.log( "mapWindow state: ", mapWindow.document.readyState );
-    globalMapWindow = mapWindow; // Hack until I objectify this
-    if ( mapWindow.document.readyState === "complete" )
-        loadMap();
-    else
-        mapWindow.addEventListener( "load", loadMap );
+    this.roomName = null;
+
+    contra.emitter( this, { async: true } );
 }
-*/
+
+MumePathMachine.prototype.processTag = function ( tag )
+{
+    if ( tag.name === "name" )
+        this.roomName = tag.text;
+    else if ( tag.name === "description" )
+    {
+        if ( this.roomName )
+        {
+            this.enterRoom( this.roomName, tag.text );
+            this.roomName = null;
+        }
+        else
+        {
+            throw "Bug: the MumePathMachine got a room description but no room name: "
+                + tag.text.substr( 0, 50 ) + "...";
+        }
+    }
+    else if ( tag.name === "room" )
+    {
+        this.roomName = null;
+    }
+}
+
+MumePathMachine.prototype.enterRoom = function( name, desc )
+{
+    var room, roomIds;
+
+    roomIds = this.mapData.findRoomIdsByNameDesc( name, desc );
+    if ( roomIds !== undefined )
+    {
+        room = this.mapData.data[roomIds[0]];
+        this.emit( "movement", room[MD_X], room[MD_Y] );
+    }
+    else
+    {
+        console.log( "Unknown room: " + name );
+    }
+}
 
 
 
@@ -109,16 +144,35 @@ MumeMapData.prototype.indexRooms = function()
         var key, room;
         room = this.data[i];
         key = room[MD_NAME] + "\n" + room[MD_DESC];
-        this.descIndex[key] = i;
+        if ( this.descIndex[key] === undefined )
+            this.descIndex[key] = [ i ];
+        else
+            this.descIndex[key].push( i );
     }
 }
 
-// Returns ID or undefined
-MumeMapData.prototype.findRoomByNameDesc = function( name, desc )
+// This is a vast simplification of course...
+MumeMapData.ANY_ANSI_ESCAPE = /\x1B\[[^A-Za-z]+[A-Za-z]/g;
+
+// Make sure none of this data contains colour (or other) escapes,
+// because we indexed on the plain text. Same thing for linebreaks.
+MumeMapData.sanitizeString = function( text )
 {
-    var num;
-    num = this.descIndex[name + "\n" + desc];
-    return num;
+    return text
+        .replace( MumeMapData.ANY_ANSI_ESCAPE, '' )
+        .replace( /\r\n/g, "\n" );
+}
+
+// Returns an array of possible IDs or undefined
+MumeMapData.prototype.findRoomIdsByNameDesc = function( name, desc )
+{
+    var rooms;
+
+    name = MumeMapData.sanitizeString( name );
+    desc = MumeMapData.sanitizeString( desc );
+
+    rooms = this.descIndex[name + "\n" + desc];
+    return rooms;
 }
 
 hardcodedMapData = [
@@ -131,7 +185,7 @@ hardcodedMapData = [
         +"down the great staircase at whose top you now stand. Guards stand watch by the\n"
         +"stairs, scowling at non-Dwarves, and a large sign is etched into the stone\n"
         +"above them. It has been a long time since the eyes of Men or Elves have been\n"
-        +"welcome in the strongholds of the Dwarves, and this place is no exception."
+        +"welcome in the strongholds of the Dwarves, and this place is no exception.\n"
     ],
     /* 1 */ [
         6, 5, 0, null, null, null, 1, null, null,
@@ -143,7 +197,7 @@ hardcodedMapData = [
         +"weary travellers may rest on benches along the way. On the ceiling high above\n"
         +"can be seen a bright blue sky dotted with puffy white clouds. This part of the\n"
         +"way is particularly busy, as it intersects the main path from the outside to\n"
-        +"the deeper parts of the Dwarven caves."
+        +"the deeper parts of the Dwarven caves.\n"
     ]
 ];
 
@@ -330,10 +384,21 @@ MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
  */
 MumeXmlParser = function()
 {
+    this.clear();
+
+    /* NB: async events may end up delivered non-sequentially, whereas order
+     * matters for tags. If our subscriber (MumePathMachine) takes too much
+     * time processing, we may have to add an intermediate step that
+     * reassembles the room before delivering asynchronously to the path
+     * machine.
+     */
+    contra.emitter( this, { async: false } );
+}
+
+MumeXmlParser.prototype.clear = function()
+{
     this.tagStack = [];
     this.plainText = "";
-
-    contra.emitter( this );
 }
 
 MumeXmlParser.prototype.topTag = function()
@@ -382,9 +447,9 @@ MumeXmlParser.decodeEntities = function( text )
  */
 MumeXmlParser.prototype.filterInput = function( input )
 {
-    var matches, isEnd, isLeaf, tagName, attr, textBefore, textAfter;
+    var matches, isEnd, isLeaf, tagName, attr, textBefore, textAfter, matched;
 
-    while ( ( matches = re.exec( input ) ) !== null )
+    while ( ( matches = MumeXmlParser.TAG_RE.exec( input ) ) !== null )
     {
         textBefore = matches[1];
         isEnd      = matches[2];
@@ -392,6 +457,8 @@ MumeXmlParser.prototype.filterInput = function( input )
         attr       = matches[4];
         isLeaf     = matches[5];
         textAfter  = matches[6];
+
+        matched = true;
 
         if ( textBefore )
         {
@@ -418,13 +485,17 @@ MumeXmlParser.prototype.filterInput = function( input )
         }
     }
 
-    return MumeXmlParser.decodeEntities( this.resetPlainText() );
+    if ( ! matched )
+        return input;
+
+    return this.resetPlainText();
 }
 
 MumeXmlParser.prototype.pushText = function( text )
 {
     var topTag, error;
 
+    text = MumeXmlParser.decodeEntities( text );
     topTag = this.topTag();
 
     if ( !topTag || topTag.name === "xml" )
@@ -440,6 +511,7 @@ MumeXmlParser.prototype.pushText = function( text )
     }
     else
     {
+        this.plainText += text;
         topTag.text += text;
     }
 }
@@ -483,7 +555,7 @@ MumeXmlParser.prototype.endTag = function( tagName )
     }
 
     topTag = this.tagStack.pop();
-    this.emit( 'tagend', topTag );
+    this.emit( "tagend", topTag );
 }
 
 })();

@@ -7,12 +7,17 @@
     <script src="libs/contra.js" type="text/javascript"></script>
     <script src="mume.mapper.js" type="text/javascript"></script>
     <script type="text/javascript">
-        window.onload = function() {
+        var globalMap;
+        (function() {
             "use strict";
-            var map;
-            map = new MumeMap( "map" );
-            map.load();
-        }
+
+            globalMap = new MumeMap( "map" );
+
+            window.addEventListener( "load", function( e )
+            {
+                globalMap.load();
+            } );
+        })();
     </script>
 </head>
 <body>
