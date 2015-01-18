@@ -41,8 +41,14 @@ function open_mume_map_window()
     {
         var parser, map;
 
-        parser = new MumeXmlParser();
-        DecafMUD.instances[0].setTextFilter( parser.filterInput.bind( parser ) );
+        parser = DecafMUD.instances[0].textInputFilter;
+        if ( !( parser instanceof MumeXmlParser ) )
+        {
+            throw "Bug: expected to find a MumeXmlParser installed as "
+                +"DecafMUD input text filter, found: " + typeof parser + " "
+                +"(possible cause: textinputfilter DecafMUD option not set to "
+                +"'mumexml'.";
+        }
 
         map = mapWindow.globalMap;
         parser.on( "tagend", map.processTag.bind( map ) );

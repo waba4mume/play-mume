@@ -379,7 +379,7 @@ MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
  * One registers to events by calling:
  * parser.on( "tagend", function( tag ) { /* Use tag.name etc here *./ } );
  */
-MumeXmlParser = function()
+MumeXmlParser = function( decaf )
 {
     this.clear();
 
@@ -389,7 +389,7 @@ MumeXmlParser = function()
      * reassembles the room before delivering asynchronously to the path
      * machine.
      */
-    contra.emitter( this, { async: false } );
+    contra.emitter( this, { async: false, throws: false } );
 }
 
 MumeXmlParser.prototype.clear = function()
@@ -397,6 +397,8 @@ MumeXmlParser.prototype.clear = function()
     this.tagStack = [];
     this.plainText = "";
 }
+
+MumeXmlParser.prototype.connected = MumeXmlParser.prototype.clear;
 
 MumeXmlParser.prototype.topTag = function()
 {
@@ -442,7 +444,7 @@ MumeXmlParser.decodeEntities = function( text )
 
 /* Takes text with pseudo-XML as input, returns plain text and emits events.
  */
-MumeXmlParser.prototype.filterInput = function( input )
+MumeXmlParser.prototype.filterInputText = function( input )
 {
     var matches, isEnd, isLeaf, tagName, attr, textBefore, textAfter, matched;
 
@@ -554,5 +556,7 @@ MumeXmlParser.prototype.endTag = function( tagName )
     topTag = this.tagStack.pop();
     this.emit( "tagend", topTag );
 }
+
+DecafMUD.plugins.TextInputFilter.mumexml = MumeXmlParser;
 
 })();
