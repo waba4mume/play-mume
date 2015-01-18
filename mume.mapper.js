@@ -59,6 +59,8 @@ MumePathMachine = function( mapData )
     contra.emitter( this, { async: true } );
 }
 
+/* This receives an event from MumeXmlParser when it encounters a closing tag.
+ * */
 MumePathMachine.prototype.processTag = function ( tag )
 {
     if ( tag.name === "name" )
@@ -82,6 +84,7 @@ MumePathMachine.prototype.processTag = function ( tag )
     }
 }
 
+/* Internal function called when we got a complete room. */
 MumePathMachine.prototype.enterRoom = function( name, desc )
 {
     var room, roomIds;
@@ -102,6 +105,8 @@ MumePathMachine.prototype.enterRoom = function( name, desc )
 
 
 
+/* Stores map data (an array of room structures, exposed as .data) and provides
+ * an indexing feature. */
 MumeMapData = function()
 {
     this.data = hardcodedMapData;
@@ -199,6 +204,8 @@ hardcodedMapData = [
 
 
 
+/* Renders mapData into a DOM placeholder identified by containerElementName.
+ */
 MumeMapDisplay = function( containerElementName, mapData )
 {
     this.mapData = mapData;
@@ -206,6 +213,9 @@ MumeMapDisplay = function( containerElementName, mapData )
     this.herePointer = null;
 }
 
+/* Installs the viewport into the DOM and starts loading textures etc (assets).
+ * The loading continues in background, after which buildMapDisplay() is
+ * called. */
 MumeMapDisplay.prototype.loadMap = function()
 {
     var renderer, stage, animate, stub, loader;
@@ -230,6 +240,9 @@ MumeMapDisplay.prototype.loadMap = function()
     return;
 }
 
+/* Called when all assets are available. Constructs the graphical structure
+ * (layers etc) used for rendering and throw all that at the rendering layer
+ * (Pixi lib). */
 MumeMapDisplay.prototype.buildMapDisplay = function( stage )
 {
     var map, layer0;
@@ -270,6 +283,8 @@ MumeMapDisplay.getAllAssetPaths = function()
     return paths;
 }
 
+/* Returns the graphical structure for a single room for rendering (base
+ * texture, walls, flags etc). */
 MumeMapDisplay.buildRoomDisplay = function( room )
 {
     var display, sector, borders;
@@ -310,6 +325,8 @@ MumeMapDisplay.buildRoomDisplay = function( room )
     return display;
 }
 
+/* Returns the graphical structure for the yellow square that shows the current
+ * position to the player. */
 MumeMapDisplay.buildHerePointer = function()
 {
     var square, size, offset;
