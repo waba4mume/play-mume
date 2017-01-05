@@ -49,7 +49,6 @@ MumeMap.prototype.load = function()
 
 
 
-
 /* Analogy to MMapper2's path machine, although ours is a currently just a
  * naive room+desc exact search with no "path" to speak of.
  */
@@ -184,13 +183,23 @@ MumeMapData.prototype.findRoomIdsByNameDesc = function( name, desc )
     return rooms;
 }
 
+// Returns a simple distance useful to determine what to include on the map and
+// what to filter out
+var displayFilterDistance = function( x1, y1, x2, y2 )
+{
+    return Math.abs( x2 - x1 ) + Math.abs( y2 - y1 );
+}
+
 /* Renders mapData into a DOM placeholder identified by containerElementName.
  */
 MumeMapDisplay = function( containerElementName, mapData )
 {
     this.mapData = mapData;
     this.containerElementName = containerElementName;
+
+    // PIXI elements
     this.herePointer = null;
+    this.layer0 = null;
 }
 
 /* Installs the viewport into the DOM and starts loading textures etc (assets).
@@ -225,24 +234,15 @@ MumeMapDisplay.prototype.loadMap = function()
  * (Pixi lib). */
 MumeMapDisplay.prototype.buildMapDisplay = function( stage )
 {
-    var map, layer0;
+    var map;
 
     // Everything belongs to the map, so we can move it around to emulate
     // moving the viewport
     map = new PIXI.DisplayObjectContainer();
 
     // Add the rooms to a base layer (later we'll need more layers)
-    layer0 = new PIXI.DisplayObjectContainer();
-    var roomsLoaded = 0;
-    var totalRooms = this.mapData.data.length;
-    this.mapData.data.forEach( function( room )
-    {
-        layer0.addChild( MumeMapDisplay.buildRoomDisplay( room ) );
-        if ( roomsLoaded % 1000 == 0 )
-            console.log( roomsLoaded + "/" + totalRooms + " rooms loaded into PIXI" );
-        ++roomsLoaded;
-    } );
-    map.addChild( layer0 );
+    this.layer0 = new PIXI.DisplayObjectContainer();
+    map.addChild( this.layer0 );
 
     // Add the current room yellow square
     this.herePointer = MumeMapDisplay.buildHerePointer();
@@ -333,6 +333,23 @@ MumeMapDisplay.buildHerePointer = function()
 MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
 {
     this.herePointer.position = new PIXI.Point( rooms_x * ROOM_PIXELS, rooms_y * ROOM_PIXELS );
+
+    // XXX This will need to be optimized to avoid going through that whole
+    // array on every move...
+    var layer0 = this.layer0;
+    var roomsAdded = 0;
+    this.mapData.data.forEach( function( room )
+    {
+        if ( !room.inPixi && displayFilterDistance( rooms_x, rooms_y, room.x, room.y ) < 60 )
+        {
+            layer0.addChild( MumeMapDisplay.buildRoomDisplay( room ) );
+            room.inPixi = true;
+            ++roomsAdded;
+        }
+    } );
+
+    if ( roomsAdded != 0 )
+        console.log( "Added " + roomsAdded + " rooms to PIXI" );
 
     return;
 }
