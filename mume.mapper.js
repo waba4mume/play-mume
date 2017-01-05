@@ -3,8 +3,7 @@ var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumePathMachine;
 (function() {
 'use strict';
 
-var hardcodedMapData,
-    ROOM_PIXELS = 48,
+var ROOM_PIXELS = 48,
     SECT_UNDEFINED      =  0,
     SECT_INSIDE         =  1,
     SECT_CITY           =  2,
@@ -38,8 +37,12 @@ MumeMap = function( containerElementName )
 
 MumeMap.prototype.load = function()
 {
-    this.mapData.load();
-    this.display.loadMap();
+    var map = this;
+
+    this.mapData.load().done( function()
+    {
+        map.display.loadMap();
+    } );
 
     this.pathMachine.on( "movement", this.display.repositionHere.bind( this.display ) );
 }
@@ -109,7 +112,7 @@ MumePathMachine.prototype.enterRoom = function( name, desc )
  * an indexing feature. */
 MumeMapData = function()
 {
-    this.data = hardcodedMapData;
+    this.data = null;
     this.descIndex = null;
 }
 
@@ -119,9 +122,24 @@ MumeMapData.REQUIRED_PROPS = [
     "x", "y", "z", "north", "east", "south", "west", "up", "down",
     "sector", "mobflags", "loadflags", "light", "ridable", "name", "desc" ];
 
+// Initiates loading the external JSON map data.
+// Returns a JQuery future that can be used to execute further code once done.
 MumeMapData.prototype.load = function()
 {
-    this.indexRooms();
+    var map = this;
+
+    return jQuery.getJSON( "arda-base.json" )
+        .done( function( json )
+        {
+            map.data = json;
+            console.log( "Arda map data loaded" );
+            map.indexRooms();
+        })
+        .fail( function( jqxhr, textStatus, error )
+        {
+            var err = textStatus + ", " + error;
+            console.log( "Arda map loading failed: " + err );
+        });
 }
 
 // Uses the JS builtin hash to index rooms.
@@ -131,16 +149,14 @@ MumeMapData.prototype.indexRooms = function()
 {
     this.descIndex = {};
 
-    var i;
-    for ( i = 0; i < this.data.length; ++i )
+    for ( var i = 0; i < this.data.length; ++i )
     {
-        var key, room;
-        room = this.data[i];
-        key = room.name + "\n" + room.desc;
-        if ( this.descIndex[key] === undefined )
-            this.descIndex[key] = [ i ];
+        var room = this.data[ i ];
+        var key = room.name + "\n" + room.desc;
+        if ( this.descIndex[ key ] === undefined )
+            this.descIndex[ key ] = [ i ];
         else
-            this.descIndex[key].push( i );
+            this.descIndex[ key ].push( i );
     }
 }
 
@@ -164,45 +180,9 @@ MumeMapData.prototype.findRoomIdsByNameDesc = function( name, desc )
     name = MumeMapData.sanitizeString( name );
     desc = MumeMapData.sanitizeString( desc );
 
-    rooms = this.descIndex[name + "\n" + desc];
+    rooms = this.descIndex[ name + "\n" + desc ];
     return rooms;
 }
-
-// TODO: this should be loaded from some external JSON source, same format
-// (with a sanity check).
-hardcodedMapData = [
-    /* 0 */ {
-        x: 5, y: 5, z: 0,
-        north: null, east: 1, south: null, west: null, up: null, down: null,
-        sector: 2 /* SECT_CITY */, mobflags: 0, loadflags: 0, light: null, RIDEABLE: null,
-        name: "Fortune's Delving",
-        desc:
-        "A largely ceremonial hall, it was the first mineshaft that led down to what is\n"
-        +"now the second level of this Dwarven city. Dwarves hustle and bustle up and\n"
-        +"down the great staircase at whose top you now stand. Guards stand watch by the\n"
-        +"stairs, scowling at non-Dwarves, and a large sign is etched into the stone\n"
-        +"above them. It has been a long time since the eyes of Men or Elves have been\n"
-        +"welcome in the strongholds of the Dwarves, and this place is no exception.\n"
-    },
-    /* 1 */ {
-        x: 6, y: 5, z: 0,
-        north: null, east: null, south: null, west: 1, up: null, down: null,
-        sector: 1 /* SECT_INSIDE */, mobflags: 0, loadflags: 0, light: null, RIDEABLE: null,
-        name: "Trader's Way",
-        desc:
-        "This wide way has been modelled as an avenue, in the style of Elves and Men. To\n"
-        +"the sides are shops selling all sorts of goods, bustling with Dwarves and the\n"
-        +"occasional Man or Elf. Between the shops bright outdoor scenes are painted and\n"
-        +"weary travellers may rest on benches along the way. On the ceiling high above\n"
-        +"can be seen a bright blue sky dotted with puffy white clouds. This part of the\n"
-        +"way is particularly busy, as it intersects the main path from the outside to\n"
-        +"the deeper parts of the Dwarven caves.\n"
-    }
-];
-
-
-
-
 
 /* Renders mapData into a DOM placeholder identified by containerElementName.
  */
@@ -253,9 +233,14 @@ MumeMapDisplay.prototype.buildMapDisplay = function( stage )
 
     // Add the rooms to a base layer (later we'll need more layers)
     layer0 = new PIXI.DisplayObjectContainer();
+    var roomsLoaded = 0;
+    var totalRooms = this.mapData.data.length;
     this.mapData.data.forEach( function( room )
     {
         layer0.addChild( MumeMapDisplay.buildRoomDisplay( room ) );
+        if ( roomsLoaded % 1000 == 0 )
+            console.log( roomsLoaded + "/" + totalRooms + " rooms loaded into PIXI" );
+        ++roomsLoaded;
     } );
     map.addChild( layer0 );
 
