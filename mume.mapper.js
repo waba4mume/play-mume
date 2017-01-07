@@ -46,8 +46,15 @@ MumeMap.prototype.load = function()
         map.display.loadMap();
     } );
 
-    this.pathMachine.on( "movement", this.display.repositionHere.bind( this.display ) );
+    this.pathMachine.on( "movement", this.onMovement.bind( this ) );
 }
+
+MumeMap.prototype.onMovement = function( rooms_x, rooms_y )
+{
+    this.display.repositionHere( rooms_x, rooms_y );
+    this.display.refresh();
+}
+
 
 
 
@@ -201,7 +208,9 @@ MumeMapDisplay = function( containerElementName, mapData )
 
     // PIXI elements
     this.herePointer = null;
+    this.stage = null;
     this.layer0 = null;
+    this.renderer = null;
 }
 
 /* Installs the viewport into the DOM and starts loading textures etc (assets).
@@ -209,19 +218,15 @@ MumeMapDisplay = function( containerElementName, mapData )
  * called. */
 MumeMapDisplay.prototype.loadMap = function()
 {
-    var stub, animate, renderer, stage;
+    var stub;
 
     // Set the Pixi viewport as the content of that new window
-    stage = new PIXI.Container();
-    animate = function() {
-        requestAnimationFrame( animate );
-        renderer.render( stage );
-    };
-    renderer = PIXI.autoDetectRenderer( 800, 600 );
+    this.stage = new PIXI.Container();
+    this.renderer = PIXI.autoDetectRenderer( 800, 600 );
+    this.renderer.backgroundColor = 0x6e6e6e;
     stub = document.getElementById( this.containerElementName );
-    stub.parentElement.replaceChild( renderer.view, stub );
-    renderer.view.id = this.containerElementName;
-    requestAnimationFrame( animate );
+    stub.parentElement.replaceChild( this.renderer.view, stub );
+    this.renderer.view.id = this.containerElementName;
 
     // Start loading assets
     PIXI.loader.add( MumeMapDisplay.getAllAssetPaths() );
@@ -233,7 +238,7 @@ MumeMapDisplay.prototype.loadMap = function()
 /* Called when all assets are available. Constructs the graphical structure
  * (layers etc) used for rendering and throw all that at the rendering layer
  * (Pixi lib). */
-MumeMapDisplay.prototype.buildMapDisplay = function( stage )
+MumeMapDisplay.prototype.buildMapDisplay = function()
 {
     var map;
 
@@ -251,7 +256,8 @@ MumeMapDisplay.prototype.buildMapDisplay = function( stage )
     map.addChild( this.herePointer );
 
     // And set the stage
-    stage.addChild( map );
+    this.stage.addChild( map );
+    this.refresh();
 
     return;
 }
@@ -354,6 +360,11 @@ MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
         console.log( "Added " + roomsAdded + " rooms to PIXI" );
 
     return;
+}
+
+MumeMapDisplay.prototype.refresh = function()
+{
+    this.renderer.render( this.stage );
 }
 
 
