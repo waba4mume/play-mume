@@ -362,8 +362,14 @@ MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
     } );
 
     if ( roomsAdded != 0 )
-        console.log( "Added " + roomsAdded + " rooms to PIXI, area "+minX+","+minY+"-"+maxX+","+maxY );
-    console.log( "Recentered pointer to " + rooms_x + "," + rooms_y );
+        console.log( "Added " + roomsAdded + " rooms to PIXI, area (r) "+minX+","+minY+"-"+maxX+","+maxY );
+    console.log( "Recentered pointer to (r) " + rooms_x + "," + rooms_y );
+
+    // Scroll to make the herePointer visible
+    var pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
+    this.stage.x = - pointerGlobalPos.x + 400;
+    this.stage.y = - pointerGlobalPos.y + 300;
+    console.log( "Scrolled to (px) " + this.stage.x + "," + this.stage.y );
 
     return;
 }
