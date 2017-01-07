@@ -33,6 +33,8 @@ MumeMap = function( containerElementName )
 
     this.pathMachine = new MumePathMachine( this.mapData );
     this.processTag = this.pathMachine.processTag.bind( this.pathMachine );
+
+    MumeMap.debugInstance = this;
 }
 
 MumeMap.prototype.load = function()
