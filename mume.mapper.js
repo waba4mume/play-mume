@@ -346,6 +346,7 @@ MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
     // array on every move...
     var layer0 = this.layer0;
     var roomsAdded = 0;
+    var minX = null, maxX = null, minY = null, maxY = null;
     this.mapData.data.forEach( function( room )
     {
         if ( !room.inPixi && displayFilterDistance( rooms_x, rooms_y, room.x, room.y ) < 60 )
@@ -353,11 +354,16 @@ MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
             layer0.addChild( MumeMapDisplay.buildRoomDisplay( room ) );
             room.inPixi = true;
             ++roomsAdded;
+            minX = Math.min( minX, room.x );
+            maxX = Math.max( maxX, room.x );
+            minY = Math.min( minY, room.y );
+            maxY = Math.max( maxY, room.y );
         }
     } );
 
     if ( roomsAdded != 0 )
-        console.log( "Added " + roomsAdded + " rooms to PIXI" );
+        console.log( "Added " + roomsAdded + " rooms to PIXI, area "+minX+","+minY+"-"+maxX+","+maxY );
+    console.log( "Recentered pointer to " + rooms_x + "," + rooms_y );
 
     return;
 }
