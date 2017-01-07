@@ -207,10 +207,10 @@ MumeMapDisplay = function( containerElementName, mapData )
  * called. */
 MumeMapDisplay.prototype.loadMap = function()
 {
-    var renderer, stage, animate, stub, loader;
+    var stub, animate, renderer, stage;
 
     // Set the Pixi viewport as the content of that new window
-    stage = new PIXI.Stage( 0x6e6e6e );
+    stage = new PIXI.Container();
     animate = function() {
         requestAnimationFrame( animate );
         renderer.render( stage );
@@ -222,9 +222,8 @@ MumeMapDisplay.prototype.loadMap = function()
     requestAnimationFrame( animate );
 
     // Start loading assets
-    loader = new PIXI.AssetLoader( MumeMapDisplay.getAllAssetPaths() );
-    loader.onComplete = this.buildMapDisplay.bind( this, stage );
-    loader.load();
+    PIXI.loader.add( MumeMapDisplay.getAllAssetPaths() );
+    PIXI.loader.load( this.buildMapDisplay.bind( this ) );
 
     return;
 }
@@ -238,10 +237,10 @@ MumeMapDisplay.prototype.buildMapDisplay = function( stage )
 
     // Everything belongs to the map, so we can move it around to emulate
     // moving the viewport
-    map = new PIXI.DisplayObjectContainer();
+    map = new PIXI.Container();
 
     // Add the rooms to a base layer (later we'll need more layers)
-    this.layer0 = new PIXI.DisplayObjectContainer();
+    this.layer0 = new PIXI.Container();
     map.addChild( this.layer0 );
 
     // Add the current room yellow square
@@ -272,12 +271,13 @@ MumeMapDisplay.getAllAssetPaths = function()
  * texture, walls, flags etc). */
 MumeMapDisplay.buildRoomDisplay = function( room )
 {
-    var display, sector, borders;
+    var display, sector, borders, imgPath;
 
-    display = new PIXI.DisplayObjectContainer();
+    display = new PIXI.Container();
 
     // load a PNG as background (sector type)
-    sector = PIXI.Sprite.fromImage( MumeMapDisplay.getSectorAssetPath( room.sector ) );
+    imgPath = MumeMapDisplay.getSectorAssetPath( room.sector );
+    sector = new PIXI.Sprite( PIXI.loader.resources[ imgPath ].texture );
     sector.height = sector.width = ROOM_PIXELS; // Just in case we got a wrong PNG here
     display.addChild( sector );
 
