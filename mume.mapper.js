@@ -1,7 +1,7 @@
-var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumePathMachine;
-
-(function() {
+(function( global ) {
 'use strict';
+
+var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumePathMachine;
 
 var ROOM_PIXELS = 48,
     SECT_UNDEFINED      =  0,
@@ -601,6 +601,7 @@ MumeXmlParser.prototype.endTag = function( tagName )
     this.emit( "tagend", topTag );
 }
 
-DecafMUD.plugins.TextInputFilter.mumexml = MumeXmlParser;
+global.MumeMap       = MumeMap;
+global.MumeXmlParser = MumeXmlParser;
 
-})();
+})( this );
