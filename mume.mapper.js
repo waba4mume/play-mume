@@ -150,21 +150,23 @@ MumeMapData.prototype.load = function()
         });
 }
 
-// Uses the JS builtin hash to index rooms.
+// Uses the JS builtin hash algorithm to index rooms.
 // Should be fast, but memory-hungry. We might load only a pre-computed
 // hash of the room to save memory later. To be tested.
 MumeMapData.prototype.indexRooms = function()
 {
-    this.descIndex = {};
+    var room, key;
+
+    this.descIndex = new Map();
 
     for ( var i = 0; i < this.data.length; ++i )
     {
-        var room = this.data[ i ];
-        var key = room.name + "\n" + room.desc;
-        if ( this.descIndex[ key ] === undefined )
-            this.descIndex[ key ] = [ i ];
+        room = this.data[ i ];
+        key = MumeMapData.nameDescToIndex( room.name, room.desc );
+        if ( !this.descIndex.has( key ) )
+            this.descIndex.set( key, [ i ] );
         else
-            this.descIndex[ key ].push( i );
+            this.descIndex.get( key ).push( i );
     }
 }
 
@@ -177,18 +179,25 @@ MumeMapData.sanitizeString = function( text )
 {
     return text
         .replace( MumeMapData.ANY_ANSI_ESCAPE, '' )
-        .replace( /\r\n/g, "\n" );
+        .replace( /\r\n/g, "\n" )
+        .replace( / +$/gm, '' );
+}
+
+MumeMapData.nameDescToIndex = function( name, desc )
+{
+    name = MumeMapData.sanitizeString( name );
+    desc = MumeMapData.sanitizeString( desc );
+
+    return name + "\n" + desc;
 }
 
 // Returns an array of possible IDs or undefined
 MumeMapData.prototype.findRoomIdsByNameDesc = function( name, desc )
 {
-    var rooms;
+    var rooms, nameDesc;
 
-    name = MumeMapData.sanitizeString( name );
-    desc = MumeMapData.sanitizeString( desc );
-
-    rooms = this.descIndex[ name + "\n" + desc ];
+    nameDesc = MumeMapData.nameDescToIndex( name, desc );
+    rooms = this.descIndex.get( nameDesc );
     return rooms;
 }
 
