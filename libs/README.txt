@@ -1,6 +1,9 @@
-Drop here pixi.dev.js from:
-https://github.com/GoodBoyDigital/pixi.js/raw/master/bin/pixi.dev.js
+Drop here pixi.js from:
+https://pixijs.download/v4.5.5/pixi.js
 
-And contra:
-https://github.com/bevacqua/contra/raw/master/dist/contra.js
-https://github.com/bevacqua/contra/raw/master/dist/contra.shim.js
+And contra (events library):
+https://raw.githubusercontent.com/bevacqua/contra/v1.9.4/dist/contra.js
+https://raw.githubusercontent.com/bevacqua/contra/v1.9.4/dist/contra.shim.js
+
+And jQuery:
+https://code.jquery.com/jquery-3.2.1.js
