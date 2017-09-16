@@ -51,7 +51,7 @@ function open_mume_map_window()
         }
 
         map = mapWindow.globalMap;
-        parser.on( "tagend", map.processTag.bind( map ) );
+        parser.on( MumeXmlParser.SIG_TAG_END, map.processTag.bind( map ) );
 
         console.log( "The main window will now send data to the map window" );
     } );

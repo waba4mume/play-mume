@@ -26,6 +26,7 @@ var ROOM_PIXELS = 48,
 
 
 
+/* This is the "entry point" to this library for the rest of the code. */
 MumeMap = function( containerElementName )
 {
     this.mapData = new MumeMapData();
@@ -35,7 +36,7 @@ MumeMap = function( containerElementName )
     this.processTag = this.pathMachine.processTag.bind( this.pathMachine );
 
     MumeMap.debugInstance = this;
-}
+};
 
 MumeMap.prototype.load = function()
 {
@@ -46,14 +47,16 @@ MumeMap.prototype.load = function()
         map.display.loadMap();
     } );
 
-    this.pathMachine.on( "movement", this.onMovement.bind( this ) );
-}
+    this.pathMachine.on( MumePathMachine.SIG_MOVEMENT, this.onMovement.bind( this ) );
+};
 
 MumeMap.prototype.onMovement = function( rooms_x, rooms_y )
 {
     this.display.repositionHere( rooms_x, rooms_y );
     this.display.refresh();
-}
+};
+
+
 
 
 
@@ -68,11 +71,13 @@ MumePathMachine = function( mapData )
     this.roomName = null;
 
     contra.emitter( this, { async: true } );
-}
+};
+
+MumePathMachine.SIG_MOVEMENT = "movement";
 
 /* This receives an event from MumeXmlParser when it encounters a closing tag.
  * */
-MumePathMachine.prototype.processTag = function ( tag )
+MumePathMachine.prototype.processTag = function( tag )
 {
     if ( tag.name === "name" )
         this.roomName = tag.text;
@@ -85,15 +90,15 @@ MumePathMachine.prototype.processTag = function ( tag )
         }
         else
         {
-            throw "Bug: the MumePathMachine got a room description but no room name: "
-                + tag.text.substr( 0, 50 ) + "...";
+            throw "Bug: the MumePathMachine got a room description but no room name: " +
+                tag.text.substr( 0, 50 ) + "...";
         }
     }
     else if ( tag.name === "room" )
     {
         this.roomName = null;
     }
-}
+};
 
 /* Internal function called when we got a complete room. */
 MumePathMachine.prototype.enterRoom = function( name, desc )
@@ -104,13 +109,13 @@ MumePathMachine.prototype.enterRoom = function( name, desc )
     if ( roomIds !== undefined )
     {
         room = this.mapData.data[roomIds[0]];
-        this.emit( "movement", room.x, room.y );
+        this.emit( MumePathMachine.SIG_MOVEMENT, room.x, room.y );
     }
     else
     {
         console.log( "Unknown room: " + name );
     }
-}
+};
 
 
 
@@ -122,7 +127,7 @@ MumeMapData = function()
 {
     this.data = null;
     this.descIndex = null;
-}
+};
 
 // These properties should exist for all rooms loaded from an external
 // data source.
@@ -148,7 +153,7 @@ MumeMapData.prototype.load = function()
             var err = textStatus + ", " + error;
             console.log( "Arda map loading failed: " + err );
         });
-}
+};
 
 // Uses the JS builtin hash algorithm to index rooms.
 // Should be fast, but memory-hungry. We might load only a pre-computed
@@ -168,7 +173,7 @@ MumeMapData.prototype.indexRooms = function()
         else
             this.descIndex.get( key ).push( i );
     }
-}
+};
 
 // This is a vast simplification of course...
 MumeMapData.ANY_ANSI_ESCAPE = /\x1B\[[^A-Za-z]+[A-Za-z]/g;
@@ -181,7 +186,7 @@ MumeMapData.sanitizeString = function( text )
         .replace( MumeMapData.ANY_ANSI_ESCAPE, '' )
         .replace( /\r\n/g, "\n" )
         .replace( / +$/gm, '' );
-}
+};
 
 MumeMapData.nameDescToIndex = function( name, desc )
 {
@@ -189,7 +194,7 @@ MumeMapData.nameDescToIndex = function( name, desc )
     desc = MumeMapData.sanitizeString( desc );
 
     return name + "\n" + desc;
-}
+};
 
 // Returns an array of possible IDs or undefined
 MumeMapData.prototype.findRoomIdsByNameDesc = function( name, desc )
@@ -199,14 +204,17 @@ MumeMapData.prototype.findRoomIdsByNameDesc = function( name, desc )
     nameDesc = MumeMapData.nameDescToIndex( name, desc );
     rooms = this.descIndex.get( nameDesc );
     return rooms;
-}
+};
+
+
+
 
 // Returns a simple distance useful to determine what to include on the map and
 // what to filter out
 var displayFilterDistance = function( x1, y1, x2, y2 )
 {
     return Math.abs( x2 - x1 ) + Math.abs( y2 - y1 );
-}
+};
 
 /* Renders mapData into a DOM placeholder identified by containerElementName.
  */
@@ -220,7 +228,7 @@ MumeMapDisplay = function( containerElementName, mapData )
     this.stage = null;
     this.layer0 = null;
     this.renderer = null;
-}
+};
 
 /* Installs the viewport into the DOM and starts loading textures etc (assets).
  * The loading continues in background, after which buildMapDisplay() is
@@ -242,7 +250,7 @@ MumeMapDisplay.prototype.loadMap = function()
     PIXI.loader.load( this.buildMapDisplay.bind( this ) );
 
     return;
-}
+};
 
 /* Called when all assets are available. Constructs the graphical structure
  * (layers etc) used for rendering and throw all that at the rendering layer
@@ -269,12 +277,12 @@ MumeMapDisplay.prototype.buildMapDisplay = function()
     this.refresh();
 
     return;
-}
+};
 
 MumeMapDisplay.getSectorAssetPath = function( sector )
 {
     return "resources/pixmaps/terrain" + sector + ".png";
-}
+};
 
 MumeMapDisplay.getAllAssetPaths = function()
 {
@@ -282,7 +290,7 @@ MumeMapDisplay.getAllAssetPaths = function()
     for ( i = SECT_UNDEFINED; i < SECT_COUNT; ++i )
         paths.push( MumeMapDisplay.getSectorAssetPath( i ) );
     return paths;
-}
+};
 
 /* Returns the graphical structure for a single room for rendering (base
  * texture, walls, flags etc). */
@@ -325,7 +333,7 @@ MumeMapDisplay.buildRoomDisplay = function( room )
 
     display.cacheAsBitmap = true;
     return display;
-}
+};
 
 /* Returns the graphical structure for the yellow square that shows the current
  * position to the player. */
@@ -345,7 +353,7 @@ MumeMapDisplay.buildHerePointer = function()
     square.endFill();
 
     return square;
-}
+};
 
 MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
 {
@@ -381,12 +389,12 @@ MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
     console.log( "Scrolled to (px) " + this.stage.x + "," + this.stage.y );
 
     return;
-}
+};
 
 MumeMapDisplay.prototype.refresh = function()
 {
     this.renderer.render( this.stage );
-}
+};
 
 
 
@@ -430,7 +438,7 @@ MumeMapDisplay.prototype.refresh = function()
  * during mortal sessions, and never quotes it.
  *
  * One registers to events by calling:
- * parser.on( "tagend", function( tag ) { /* Use tag.name etc here *./ } );
+ * parser.on( MumeXmlParser.SIG_TAG_END, function( tag ) { /* Use tag.name etc here *./ } );
  */
 MumeXmlParser = function( decaf )
 {
@@ -443,13 +451,15 @@ MumeXmlParser = function( decaf )
      * machine.
      */
     contra.emitter( this, { async: false, throws: false } );
-}
+};
+
+MumeXmlParser.SIG_TAG_END = "tagend";
 
 MumeXmlParser.prototype.clear = function()
 {
     this.tagStack = [];
     this.plainText = "";
-}
+};
 
 MumeXmlParser.prototype.connected = MumeXmlParser.prototype.clear;
 
@@ -459,7 +469,7 @@ MumeXmlParser.prototype.topTag = function()
         return undefined;
     else
         return this.tagStack[ this.tagStack.length - 1 ];
-}
+};
 
 MumeXmlParser.prototype.resetPlainText = function()
 {
@@ -469,7 +479,7 @@ MumeXmlParser.prototype.resetPlainText = function()
     this.plainText = "";
 
     return plainText;
-}
+};
 
 /* Matches a start or end tag and captures the following:
  * 1. any text preceeding the tag
@@ -493,7 +503,7 @@ MumeXmlParser.decodeEntities = function( text )
         .replace( /&amp;/g, "&" );
 
     return decodedText;
-}
+};
 
 /* Takes text with pseudo-XML as input, returns plain text and emits events.
  */
@@ -541,7 +551,7 @@ MumeXmlParser.prototype.filterInputText = function( input )
         return input;
 
     return this.resetPlainText();
-}
+};
 
 MumeXmlParser.prototype.pushText = function( text )
 {
@@ -556,8 +566,8 @@ MumeXmlParser.prototype.pushText = function( text )
     }
     else if ( topTag.text.length > 4096 )
     {
-        error = "Probable bug: run-away MumeXmlParser tag " + topTag.name
-            + ", text: " + topTag.text.substr( 0, 50 );
+        error = "Probable bug: run-away MumeXmlParser tag " + topTag.name +
+            ", text: " + topTag.text.substr( 0, 50 );
         this.tagStack.pop();
         throw error;
     }
@@ -566,18 +576,18 @@ MumeXmlParser.prototype.pushText = function( text )
         this.plainText += text;
         topTag.text += text;
     }
-}
+};
 
 MumeXmlParser.prototype.startTag = function( tagName, attr )
 {
     this.tagStack.push( { name: tagName, attr: attr, text: "" } );
 
     if ( this.tagStack.length > 5 )
-        throw "Bug: deeply nested MumeXmlParser tags: "
-            + this.tagStack.join();
+        throw "Bug: deeply nested MumeXmlParser tags: " +
+            this.tagStack.join();
 
     return;
-}
+};
 
 MumeXmlParser.prototype.endTag = function( tagName )
 {
@@ -598,17 +608,17 @@ MumeXmlParser.prototype.endTag = function( tagName )
         throw "Bug: unmatched closing MumeXmlParser tag " + tagName;
     else if ( matchingTagIndex !== this.tagStack.length - 1 )
     {
-        error = "Bug: closing MumeXmlParser tag " + tagName
-            + " with the following other tags open: "
-            + this.tagStack.slice( matchingTagIndex + 1 ).join();
+        error = "Bug: closing MumeXmlParser tag " + tagName +
+            " with the following other tags open: " +
+            this.tagStack.slice( matchingTagIndex + 1 ).join();
 
         this.tagStack = [];
         throw error;
     }
 
     topTag = this.tagStack.pop();
-    this.emit( "tagend", topTag );
-}
+    this.emit( MumeXmlParser.SIG_TAG_END, topTag );
+};
 
 global.MumeMap       = MumeMap;
 global.MumeXmlParser = MumeXmlParser;
