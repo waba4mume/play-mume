@@ -1,7 +1,7 @@
 (function( global ) {
 'use strict';
 
-var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumePathMachine;
+var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumeMapIndex, MumePathMachine;
 
 var ROOM_PIXELS = 48,
     SECT_UNDEFINED      =  0,
@@ -22,6 +22,8 @@ var ROOM_PIXELS = 48,
     SECT_DEATHTRAP      = 15,
     SECT_COUNT = SECT_DEATHTRAP;
 
+var MAP_DATA_PATH = "mapdata/v1/";
+
 
 
 
@@ -30,9 +32,10 @@ var ROOM_PIXELS = 48,
 MumeMap = function( containerElementName )
 {
     this.mapData = new MumeMapData();
+    this.mapIndex = new MumeMapIndex();
     this.display = new MumeMapDisplay( containerElementName, this.mapData );
 
-    this.pathMachine = new MumePathMachine( this.mapData );
+    this.pathMachine = new MumePathMachine( this.mapData, this.mapIndex );
     this.processTag = this.pathMachine.processTag.bind( this.pathMachine );
 
     MumeMap.debugInstance = this;
@@ -64,9 +67,10 @@ MumeMap.prototype.onMovement = function( event, rooms_x, rooms_y )
 /* Analogy to MMapper2's path machine, although ours is a currently just a
  * naive room+desc exact search with no "path" to speak of.
  */
-MumePathMachine = function( mapData )
+MumePathMachine = function( mapData, mapIndex )
 {
     this.mapData = mapData;
+    this.mapIndex = mapIndex;
     this.roomName = null;
 };
 
@@ -101,19 +105,131 @@ MumePathMachine.prototype.processTag = function( event, tag )
 /* Internal function called when we got a complete room. */
 MumePathMachine.prototype.enterRoom = function( name, desc )
 {
-    var room, roomIds;
+    this.mapIndex.findPosByNameDesc( name, desc );
+};
 
-    roomIds = this.mapData.findRoomIdsByNameDesc( name, desc );
-    if ( roomIds !== undefined )
+
+
+
+/* Queries and caches the server-hosted index of rooms.
+ * For v1 format, that's a roomname+roomdesc => position index, 2.4MB total,
+ * split into 10kB JSON chunks.
+ */
+MumeMapIndex = function()
+{
+    this.cache = new Map();
+    this.cachedChunks = new Set();
+};
+
+// This is a vast simplification of course...
+MumeMapIndex.ANY_ANSI_ESCAPE = /\x1B\[[^A-Za-z]+[A-Za-z]/g;
+
+/* Make sure none of this data contains colour (or other) escapes,
+ * because we indexed on the plain text. Same thing for linebreaks.
+ */
+MumeMapIndex.sanitizeString = function( text )
+{
+    return text
+        .replace( MumeMapIndex.ANY_ANSI_ESCAPE, '' )
+        .replace( /\r\n/g, "\n" )
+        .replace( / +$/gm, "" );
+};
+
+/* Returns a hash of the name+desc that identifies the chunk of the name+desc
+ * index we want from the server. This algorithm must be identical to what
+ * MMapper uses for this version of the webmap format.
+ */
+MumeMapIndex.hashNameDesc = function( name, desc )
+{
+    var namedesc, blob, i, hash;
+
+    name = MumeMapIndex.sanitizeString( name );
+    desc = MumeMapIndex.sanitizeString( desc );
+    namedesc = name + desc;
+
+    // For maximum MD5 compatibility, converts namedesc into blob, discarding
+    // all chars that are not plain ASCII.
+    // String.replace(..., func) is probably faster, but I'm not sure we care.
+    blob = "";
+    for ( i = 0; i < namedesc.length;  ++i )
+        if ( namedesc.charCodeAt( i ) < 128 )
+            blob += namedesc.charAt( i );
+
+    hash = SparkMD5.hash( blob );
+    return hash;
+};
+
+MumeMapIndex.prototype.updateCache = function( json )
+{
+    var hash, oldSize, sizeIncrease, jsonSize;
+
+    oldSize = this.cache.size;
+
+    for ( hash in json )
+        if ( json.hasOwnProperty( hash ) )
+            this.cache.set( hash, json[ hash ] );
+
+    sizeIncrease = this.cache.size - oldSize;
+    jsonSize = Object.entries( json ).length;
+
+    console.log( "MumeMapIndex: cached %d new entries (%d total)",
+        sizeIncrease, this.cache.size, jsonSize );
+
+    if ( sizeIncrease != jsonSize )
+        console.error( "MumeMapIndex: stray index entries in %O?", json );
+};
+
+// Private helper for findPosByNameDesc().
+MumeMapIndex.prototype.findPosByNameDescCached = function( name, desc, result, hash )
+{
+    var positions, roomInfo;
+
+    positions = this.cache.get( hash );
+    roomInfo = { name: name, desc: desc, hash: hash, };
+    if ( positions === undefined )
     {
-        console.log( "MumePathMachine found room " + name );
-        room = this.mapData.data[roomIds[0]];
-        $(this).triggerHandler( MumePathMachine.SIG_MOVEMENT, [ room.x, room.y, ] );
+        console.log( "MumeMapIndex: unknown room %s (%O)", name, roomInfo );
+        result.fail();
     }
     else
     {
-        console.log( "Unknown room: " + name );
+        console.log( "MumeMapIndex: resolved %s (%O) to %O", name, roomInfo, positions );
+        result.resolve( positions );
     }
+    return result;
+};
+
+/* This may be asynchronous if the index chunk has not been downloaded yet, so
+ * the result is a jQuery Deferred.
+ */
+MumeMapIndex.prototype.findPosByNameDesc = function( name, desc )
+{
+    var hash, chunk, result, cache;
+
+    hash = MumeMapIndex.hashNameDesc( name, desc );
+    result = jQuery.Deferred();
+
+    // Shortcut if we already have that index chunk in cache
+    if ( this.cachedChunks.has( hash ) )
+        return this.findPosByNameDescCached( name, desc, result, hash );
+
+    chunk = hash.substr( 0, 2 );
+    jQuery.getJSON( MAP_DATA_PATH + "roomindex/" + chunk + ".json" )
+        .done( function( json )
+        {
+            console.log( "Map index chunk " + chunk + " downloaded" );
+            this.cachedChunks.add( chunk );
+            this.updateCache( json );
+            this.findPosByNameDescCached( name, desc, result, hash );
+        }.bind( this ) )
+        .fail( function( jqxhr, textStatus, error )
+        {
+            var err = textStatus + ", " + error;
+            console.log( "Loading metadata failed: " + err );
+            result.fail();
+        }.bind( this ) );
+
+    return result;
 };
 
 
@@ -124,15 +240,15 @@ MumePathMachine.prototype.enterRoom = function( name, desc )
  * an indexing feature. */
 MumeMapData = function()
 {
-    this.data = null;
-    this.descIndex = null;
 };
+
+MumeMapData.prototype.metaData = null;
 
 // These properties should exist for all rooms loaded from an external
 // data source.
 MumeMapData.REQUIRED_PROPS = [
-    "x", "y", "z", "north", "east", "south", "west", "up", "down",
-    "sector", "mobflags", "loadflags", "light", "ridable", "name", "desc" ];
+    "directions", "maxX", "maxY", "maxZ", "minX", "minY", "minZ", "roomsCount"
+    ];
 
 // Initiates loading the external JSON map data.
 // Returns a JQuery future that can be used to execute further code once done.
@@ -140,70 +256,20 @@ MumeMapData.prototype.load = function()
 {
     var map = this;
 
-    return jQuery.getJSON( "arda-base.json" )
+    return jQuery.getJSON( MAP_DATA_PATH + "arda.json" )
         .done( function( json )
         {
-            map.data = json;
-            console.log( "Arda map data loaded" );
-            map.indexRooms();
+            map.metaData = json;
+            console.log( "Map metadata loaded" );
         })
         .fail( function( jqxhr, textStatus, error )
         {
             var err = textStatus + ", " + error;
-            console.log( "Arda map loading failed: " + err );
+            console.log( "Loading metadata failed: " + err );
         });
 };
 
-// Uses the JS builtin hash algorithm to index rooms.
-// Should be fast, but memory-hungry. We might load only a pre-computed
-// hash of the room to save memory later. To be tested.
-MumeMapData.prototype.indexRooms = function()
-{
-    var room, key;
 
-    this.descIndex = new Map();
-
-    for ( var i = 0; i < this.data.length; ++i )
-    {
-        room = this.data[ i ];
-        key = MumeMapData.nameDescToIndex( room.name, room.desc );
-        if ( !this.descIndex.has( key ) )
-            this.descIndex.set( key, [ i ] );
-        else
-            this.descIndex.get( key ).push( i );
-    }
-};
-
-// This is a vast simplification of course...
-MumeMapData.ANY_ANSI_ESCAPE = /\x1B\[[^A-Za-z]+[A-Za-z]/g;
-
-// Make sure none of this data contains colour (or other) escapes,
-// because we indexed on the plain text. Same thing for linebreaks.
-MumeMapData.sanitizeString = function( text )
-{
-    return text
-        .replace( MumeMapData.ANY_ANSI_ESCAPE, '' )
-        .replace( /\r\n/g, "\n" )
-        .replace( / +$/gm, '' );
-};
-
-MumeMapData.nameDescToIndex = function( name, desc )
-{
-    name = MumeMapData.sanitizeString( name );
-    desc = MumeMapData.sanitizeString( desc );
-
-    return name + "\n" + desc;
-};
-
-// Returns an array of possible IDs or undefined
-MumeMapData.prototype.findRoomIdsByNameDesc = function( name, desc )
-{
-    var rooms, nameDesc;
-
-    nameDesc = MumeMapData.nameDescToIndex( name, desc );
-    rooms = this.descIndex.get( nameDesc );
-    return rooms;
-};
 
 
 
@@ -268,7 +334,7 @@ MumeMapDisplay.prototype.buildMapDisplay = function()
 
     // Add the current room yellow square
     this.herePointer = MumeMapDisplay.buildHerePointer();
-    this.repositionHere( this.mapData.data[0].x, this.mapData.data[0].y );
+    //this.repositionHere( this.mapData.data[0].x, this.mapData.data[0].y );
     map.addChild( this.herePointer );
 
     // And set the stage
