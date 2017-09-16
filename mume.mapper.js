@@ -47,10 +47,10 @@ MumeMap.prototype.load = function()
         map.display.loadMap();
     } );
 
-    this.pathMachine.on( MumePathMachine.SIG_MOVEMENT, this.onMovement.bind( this ) );
+    $(this.pathMachine).on( MumePathMachine.SIG_MOVEMENT, this.onMovement.bind( this ) );
 };
 
-MumeMap.prototype.onMovement = function( rooms_x, rooms_y )
+MumeMap.prototype.onMovement = function( event, rooms_x, rooms_y )
 {
     this.display.repositionHere( rooms_x, rooms_y );
     this.display.refresh();
@@ -67,18 +67,16 @@ MumeMap.prototype.onMovement = function( rooms_x, rooms_y )
 MumePathMachine = function( mapData )
 {
     this.mapData = mapData;
-
     this.roomName = null;
-
-    contra.emitter( this, { async: true } );
 };
 
 MumePathMachine.SIG_MOVEMENT = "movement";
 
 /* This receives an event from MumeXmlParser when it encounters a closing tag.
  * */
-MumePathMachine.prototype.processTag = function( tag )
+MumePathMachine.prototype.processTag = function( event, tag )
 {
+    console.log( "MumePathMachine processes tag " + tag.name );
     if ( tag.name === "name" )
         this.roomName = tag.text;
     else if ( tag.name === "description" )
@@ -108,8 +106,9 @@ MumePathMachine.prototype.enterRoom = function( name, desc )
     roomIds = this.mapData.findRoomIdsByNameDesc( name, desc );
     if ( roomIds !== undefined )
     {
+        console.log( "MumePathMachine found room " + name );
         room = this.mapData.data[roomIds[0]];
-        this.emit( MumePathMachine.SIG_MOVEMENT, room.x, room.y );
+        $(this).triggerHandler( MumePathMachine.SIG_MOVEMENT, [ room.x, room.y, ] );
     }
     else
     {
@@ -443,14 +442,6 @@ MumeMapDisplay.prototype.refresh = function()
 MumeXmlParser = function( decaf )
 {
     this.clear();
-
-    /* NB: async events may end up delivered non-sequentially, whereas order
-     * matters for tags. If our subscriber (MumePathMachine) takes too much
-     * time processing, we may have to add an intermediate step that
-     * reassembles the room before delivering asynchronously to the path
-     * machine.
-     */
-    contra.emitter( this, { async: false, throws: false } );
 };
 
 MumeXmlParser.SIG_TAG_END = "tagend";
@@ -617,7 +608,7 @@ MumeXmlParser.prototype.endTag = function( tagName )
     }
 
     topTag = this.tagStack.pop();
-    this.emit( MumeXmlParser.SIG_TAG_END, topTag );
+    $(this).triggerHandler( MumeXmlParser.SIG_TAG_END, [ topTag, ] );
 };
 
 global.MumeMap       = MumeMap;
