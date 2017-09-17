@@ -43,20 +43,19 @@ MumeMap = function( containerElementName )
 
 MumeMap.prototype.load = function()
 {
-    var map = this;
-
     this.mapData.load().done( function()
     {
-        map.display.loadMap();
-    } );
-
-    $(this.pathMachine).on( MumePathMachine.SIG_MOVEMENT, this.onMovement.bind( this ) );
+        this.display.loadMap();
+        $(this.pathMachine).on( MumePathMachine.SIG_MOVEMENT, this.onMovement.bind( this ) );
+    }.bind( this ) );
 };
 
-MumeMap.prototype.onMovement = function( event, rooms_x, rooms_y )
+MumeMap.prototype.onMovement = function( event, x, y )
 {
-    this.display.repositionHere( rooms_x, rooms_y );
-    this.display.refresh();
+    this.display.repositionHere( x, y ).done( function()
+    {
+        this.display.refresh();
+    }.bind( this ) );
 };
 
 
@@ -105,7 +104,11 @@ MumePathMachine.prototype.processTag = function( event, tag )
 /* Internal function called when we got a complete room. */
 MumePathMachine.prototype.enterRoom = function( name, desc )
 {
-    this.mapIndex.findPosByNameDesc( name, desc );
+    this.mapIndex.findPosByNameDesc( name, desc )
+        .done( function( positions )
+        {
+            $(this).triggerHandler( MumePathMachine.SIG_MOVEMENT, positions[0] );
+        }.bind( this ) );
 };
 
 
@@ -125,7 +128,8 @@ MumeMapIndex = function()
 MumeMapIndex.ANY_ANSI_ESCAPE = /\x1B\[[^A-Za-z]+[A-Za-z]/g;
 
 /* Make sure none of this data contains colour (or other) escapes,
- * because we indexed on the plain text. Same thing for linebreaks.
+ * because we indexed on the plain text. Same thing for linebreaks. Also remove
+ * any trailing whitespace, because MMapper seems to do so.
  */
 MumeMapIndex.sanitizeString = function( text )
 {
@@ -189,11 +193,11 @@ MumeMapIndex.prototype.findPosByNameDescCached = function( name, desc, result, h
     if ( positions === undefined )
     {
         console.log( "MumeMapIndex: unknown room %s (%O)", name, roomInfo );
-        result.fail();
+        result.reject();
     }
     else
     {
-        console.log( "MumeMapIndex: resolved %s (%O) to %O", name, roomInfo, positions );
+        console.log( "MumeMapIndex: found %s (%O) in %O", name, roomInfo, positions );
         result.resolve( positions );
     }
     return result;
@@ -204,30 +208,30 @@ MumeMapIndex.prototype.findPosByNameDescCached = function( name, desc, result, h
  */
 MumeMapIndex.prototype.findPosByNameDesc = function( name, desc )
 {
-    var hash, chunk, result, cache;
+    var hash, chunk, result, url;
 
     hash = MumeMapIndex.hashNameDesc( name, desc );
     result = jQuery.Deferred();
 
     // Shortcut if we already have that index chunk in cache
-    if ( this.cachedChunks.has( hash ) )
+    chunk = hash.substr( 0, 2 );
+    if ( this.cachedChunks.has( chunk ) )
         return this.findPosByNameDescCached( name, desc, result, hash );
 
-    chunk = hash.substr( 0, 2 );
-    jQuery.getJSON( MAP_DATA_PATH + "roomindex/" + chunk + ".json" )
+    console.log( "Downloading map index chunk " + chunk );
+    url = MAP_DATA_PATH + "roomindex/" + chunk + ".json";
+    jQuery.getJSON( url )
         .done( function( json )
         {
-            console.log( "Map index chunk " + chunk + " downloaded" );
             this.cachedChunks.add( chunk );
             this.updateCache( json );
             this.findPosByNameDescCached( name, desc, result, hash );
         }.bind( this ) )
         .fail( function( jqxhr, textStatus, error )
         {
-            var err = textStatus + ", " + error;
-            console.log( "Loading metadata failed: " + err );
+            console.error( "Loading map index chunk %s failed: %s, %O", url, textStatus, error );
             result.fail();
-        }.bind( this ) );
+        } );
 
     return result;
 };
@@ -240,46 +244,213 @@ MumeMapIndex.prototype.findPosByNameDesc = function( name, desc )
  * an indexing feature. */
 MumeMapData = function()
 {
+    this.cachedZones = new Set();
+    // 3D array. Hopefully, JS' sparse arrays will make this memory-efficient.
+    this.rooms = [];
+
 };
 
+/* Publicly readable, guaranteed to hold REQUIRED_META_PROPS. */
 MumeMapData.prototype.metaData = null;
 
-// These properties should exist for all rooms loaded from an external
-// data source.
-MumeMapData.REQUIRED_PROPS = [
+/* These properties are expected to be found in the metadata file.
+ */
+MumeMapData.REQUIRED_META_PROPS = [
     "directions", "maxX", "maxY", "maxZ", "minX", "minY", "minZ", "roomsCount"
     ];
 
-// Initiates loading the external JSON map data.
-// Returns a JQuery future that can be used to execute further code once done.
+/* These properties should exist for all rooms loaded from an external
+ * data source.
+ */
+MumeMapData.REQUIRED_ROOM_PROPS = [
+    "name", "desc", "id", "x", "y", "z", "exits", /* There is more ... */
+    ];
+
+// Arda is split into JSON files that wide.
+MumeMapData.ZONE_SIZE = 20;
+
+/* Initiates loading the external JSON map data.
+ * Returns a JQuery Deferred that can be used to execute further code once done.
+ */
 MumeMapData.prototype.load = function()
 {
-    var map = this;
+    var result;
 
-    return jQuery.getJSON( MAP_DATA_PATH + "arda.json" )
+    result = jQuery.Deferred();
+
+    jQuery.getJSON( MAP_DATA_PATH + "arda.json" )
         .done( function( json )
         {
-            map.metaData = json;
             console.log( "Map metadata loaded" );
-        })
+            if ( ! this.setMetadata( json ) )
+                result.reject();
+            else
+                result.resolve();
+        }.bind( this ))
         .fail( function( jqxhr, textStatus, error )
         {
-            var err = textStatus + ", " + error;
-            console.log( "Loading metadata failed: " + err );
+            console.error( "Loading metadata failed: %s, %O", textStatus, error );
+            result.reject();
         });
+
+    return result;
 };
 
-
-
-
-
-
-// Returns a simple distance useful to determine what to include on the map and
-// what to filter out
-var displayFilterDistance = function( x1, y1, x2, y2 )
+/* Private helper that checks the validity of json */
+MumeMapData.prototype.setMetadata = function( json )
 {
-    return Math.abs( x2 - x1 ) + Math.abs( y2 - y1 );
+    var missing;
+
+    missing = MumeMapData.REQUIRED_META_PROPS.filter( function( prop )
+    {
+        return !json.hasOwnProperty( prop );
+    } );
+
+    if ( missing.length !== 0 )
+    {
+        console.error( "Missing properties in loaded metadata: %O", missing );
+        return false;
+    }
+
+    this.metaData = json;
+
+    // Hopefully nudge JS into allocating a sparse Array
+    if ( this.rooms.length === 0 )
+        this.rooms = new Array( this.metaData.maxX - this.metaData.minX );
+
+    return true;
 };
+
+/* Private helper to get 0-based coordinates from whatever MM2 provided */
+MumeMapData.prototype.getZeroedCoordinates = function( x, y, z )
+{
+    return {
+        x: x - this.metaData.minX,
+        y: y - this.metaData.minY,
+        z: z - this.metaData.minZ,
+    };
+};
+
+/* Private helper that feeds the in-memory cache. */
+MumeMapData.prototype.setCachedRoom = function( room )
+{
+    var zero;
+
+    zero = this.getZeroedCoordinates( room.x, room.y, room.z );
+
+    if ( this.rooms[ zero.x ] === undefined )
+        this.rooms[ zero.x ] = new Array( this.metaData.maxY - this.metaData.minY );
+
+    if ( this.rooms[ zero.x ][ zero.y ] === undefined )
+        this.rooms[ zero.x ][ zero.y ] = [];
+
+    this.rooms[ zero.x ][ zero.y ][ zero.z ] = room;
+};
+
+/* Private helper that digs up the room from the in-memory cache. */
+MumeMapData.prototype.getRoomAtCached = function( x, y, z, result )
+{
+    var zero, room;
+
+    zero = this.getZeroedCoordinates( x, y, z );
+
+    if ( this.rooms[ zero.x ] !== undefined &&
+            this.rooms[ zero.x ][ zero.y ] !== undefined &&
+            this.rooms[ zero.x ][ zero.y ][ zero.z ] !== undefined )
+    {
+        room = this.rooms[ zero.x ][ zero.y ][ zero.z ];
+        console.log( "MumeMapData found room %s (%d) for coords %d,%d,%d",
+            room.name, room.id, x, y, z );
+        result.resolve( room );
+    }
+    else
+    {
+        console.log( "MumeMapData did not find a room for coords %d,%d,%d",
+            x, y, z );
+        result.reject();
+    }
+
+    return result;
+};
+
+/* Private. Stores a freshly retrieved JSON zone into the in-memory cache. */
+MumeMapData.prototype.cacheZone = function( zone, json, url )
+{
+    var missing, i, room, count;
+
+    if ( !Array.isArray( json ) )
+    {
+        console.error( "Expected to find an Array in %s, got %O", url, json );
+        return false;
+    }
+
+    count = 0;
+    for ( i = 0; i < json.length; ++i )
+    {
+        room = json[ i ];
+
+        missing = MumeMapData.REQUIRED_ROOM_PROPS.filter( function( room2, prop )
+        {
+            return !room2.hasOwnProperty( prop );
+        }.bind( this, room ) );
+
+        if ( missing.length !== 0 )
+        {
+            console.error( "Missing properties %O in room #%d of %s", missing, i, url );
+            return false;
+        }
+
+        this.setCachedRoom( room );
+        ++count;
+    }
+
+    console.log( "MumeMapData cached %d rooms for zone %s", count, zone );
+    this.cachedZones.add( zone );
+    return true;
+};
+
+/* Fetches a room from the cache or the server. Returns a jQuery Deferred. */
+MumeMapData.prototype.getRoomAt = function ( x, y, z )
+{
+    var zoneX, zoneY, zone, result, url;
+
+    result = jQuery.Deferred();
+
+    if ( x < this.metaData.minX || x > this.metaData.maxX ||
+            y < this.metaData.minY || y > this.metaData.maxY )
+        return result.reject();
+
+    zoneX = x - ( x % MumeMapData.ZONE_SIZE );
+    zoneY = y - ( y % MumeMapData.ZONE_SIZE );
+    zone = zoneX + "," + zoneY;
+
+    if ( this.cachedZones.has( zone ) )
+        return this.getRoomAtCached( x, y, z, result );
+
+    console.log( "Downloading map zone %s for room %d,%d", zone, x, y );
+    url = MAP_DATA_PATH + "zone/" + zone + ".json";
+    jQuery.getJSON( url )
+        .done( function( json )
+        {
+            this.cacheZone( zone, json, url );
+            this.getRoomAtCached( x, y, z, result );
+        }.bind( this ) )
+        .fail( function( jqXHR, textStatus, error )
+        {
+            if ( jqXHR.status === 404 )
+                console.log( "Map zone %s does not exist: %s, %O", url, textStatus, error );
+                // Not an error: zones without data simply don't get output
+            else
+                console.error( "Downloading map zone %s failed: %s, %O", url, textStatus, error );
+            result.reject();
+        } );
+
+    return result;
+};
+
+
+
+
 
 /* Renders mapData into a DOM placeholder identified by containerElementName.
  */
@@ -334,7 +505,7 @@ MumeMapDisplay.prototype.buildMapDisplay = function()
 
     // Add the current room yellow square
     this.herePointer = MumeMapDisplay.buildHerePointer();
-    //this.repositionHere( this.mapData.data[0].x, this.mapData.data[0].y );
+    this.herePointer.visible = false;
     map.addChild( this.herePointer );
 
     // And set the stage
@@ -395,6 +566,8 @@ MumeMapDisplay.buildRoomDisplay = function( room )
 
     // Position the room display in its layer
     display.position = new PIXI.Point( room.x * ROOM_PIXELS, room.y * ROOM_PIXELS );
+    console.log( "MumeMapDisplay added room %s (%d,%d) in PIXI at %O",
+        room.name, room.x, room.y, display.getGlobalPosition() );
 
     display.cacheAsBitmap = true;
     return display;
@@ -420,38 +593,62 @@ MumeMapDisplay.buildHerePointer = function()
     return square;
 };
 
-MumeMapDisplay.prototype.repositionHere = function( rooms_x, rooms_y )
+/* Repositions the HerePointer (yellow square), centers the view, and fetches
+ * nearby rooms for Pixi. Does not refresh the view.
+ */
+MumeMapDisplay.prototype.repositionHere = function( x, y )
 {
-    this.herePointer.position = new PIXI.Point( rooms_x * ROOM_PIXELS, rooms_y * ROOM_PIXELS );
+    var i, j, roomFetchQueue, result;
 
-    // XXX This will need to be optimized to avoid going through that whole
-    // array on every move...
-    var layer0 = this.layer0;
-    var roomsAdded = 0;
-    var minX = null, maxX = null, minY = null, maxY = null;
-    this.mapData.data.forEach( function( room )
-    {
-        if ( !room.inPixi && displayFilterDistance( rooms_x, rooms_y, room.x, room.y ) < 60 )
-        {
-            layer0.addChild( MumeMapDisplay.buildRoomDisplay( room ) );
-            room.inPixi = true;
-            ++roomsAdded;
-            minX = Math.min( minX, room.x );
-            maxX = Math.max( maxX, room.x );
-            minY = Math.min( minY, room.y );
-            maxY = Math.max( maxY, room.y );
-        }
-    } );
-
-    if ( roomsAdded != 0 )
-        console.log( "Added " + roomsAdded + " rooms to PIXI, area (r) "+minX+","+minY+"-"+maxX+","+maxY );
-    console.log( "Recentered pointer to (r) " + rooms_x + "," + rooms_y );
+    this.herePointer.position = new PIXI.Point( x * ROOM_PIXELS, y * ROOM_PIXELS );
+    this.herePointer.visible = true;
 
     // Scroll to make the herePointer visible
     var pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
     this.stage.x = - pointerGlobalPos.x + 400;
     this.stage.y = - pointerGlobalPos.y + 300;
-    console.log( "Scrolled to (px) " + this.stage.x + "," + this.stage.y );
+    console.log( "Recentering view to (r) %d,%d, (px) %d,%d", x, y, this.stage.x, this.stage.y );
+
+    roomFetchQueue = []; // Actually a stack, but who cares?
+    for ( i = x - 5; i < x + 5; ++i )
+        for ( j = y - 5; j < y + 5; ++j )
+            roomFetchQueue.push( { x: i, y: j, } );
+    // TODO: cache which x,y coords are already in Pixi to avoid generating tons of
+    // Deferreds every move...
+
+    result = jQuery.Deferred();
+    this.repositionHereNext( roomFetchQueue.length, roomFetchQueue, result );
+    return result;
+};
+
+/* Private helper that asynchronously recurses through the roomFetchQueue until
+ * all rooms are fetched and pushed into Pixi.
+ */
+MumeMapDisplay.prototype.repositionHereNext = function( fetchTotal, roomFetchQueue, result )
+{
+    var fetch;
+
+    if ( roomFetchQueue.length === 0 )
+    {
+        console.log( "Done fetching %d rooms", fetchTotal );
+        result.resolve();
+    }
+    else
+    {
+        fetch = roomFetchQueue.pop();
+
+        result.notify( fetchTotal - roomFetchQueue.length, fetchTotal );
+
+        this.mapData.getRoomAt( fetch.x, fetch.y, -1 )
+            .done( function( room )
+            {
+                this.layer0.addChild( MumeMapDisplay.buildRoomDisplay( room ) );
+            }.bind( this ) )
+            .always( function()
+            {
+                this.repositionHereNext( fetchTotal, roomFetchQueue, result );
+            }.bind( this ) );
+    }
 
     return;
 };
