@@ -2,6 +2,7 @@
 'use strict';
 
 var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumeMapIndex, MumePathMachine,
+    SpatialIndex,
     ROOM_PIXELS, MAP_DATA_PATH,
     SECT_UNDEFINED, SECT_INSIDE, SECT_CITY, SECT_FIELD, SECT_FOREST, SECT_HILLS,
     SECT_MOUNTAIN, SECT_WATER_SHALLOW, SECT_WATER, SECT_WATER_NOBOAT, SECT_UNDERWATER,
@@ -301,18 +302,79 @@ MumeMapIndex.prototype.findPosByNameDesc = function( name, desc )
 
 
 
+/* Stores stuff in a x/y/z-indexed 3D array. The coordinates must be within the
+ * minX/maxX/etc bounds of the metaData.
+ */
+SpatialIndex = function( metaData )
+{
+    this.metaData = metaData;
+
+    // 3D array. Hopefully, JS' sparse arrays will make this memory-efficient.
+    this.data = new Array( this.metaData.maxX - this.metaData.minX );
+};
+
+/* Private helper to get 0-based coordinates from whatever MM2 provided */
+SpatialIndex.prototype.getZeroedCoordinates = function( x, y, z )
+{
+    return {
+        x: x - this.metaData.minX,
+        y: y - this.metaData.minY,
+        z: z - this.metaData.minZ,
+    };
+};
+
+/* Public. */
+SpatialIndex.prototype.set = function( x, y, z, what )
+{
+    var zero;
+
+    zero = this.getZeroedCoordinates( x, y, z );
+
+    if ( this.data[ zero.x ] === undefined )
+        this.data[ zero.x ] = new Array( this.metaData.maxY - this.metaData.minY );
+
+    if ( this.data[ zero.x ][ zero.y ] === undefined )
+        this.data[ zero.x ][ zero.y ] = [];
+
+    this.data[ zero.x ][ zero.y ][ zero.z ] = what;
+};
+
+/* Public. */
+SpatialIndex.prototype.get = function( x, y, z )
+{
+    var zero, what;
+
+    zero = this.getZeroedCoordinates( x, y, z );
+
+    if ( this.data[ zero.x ] !== undefined &&
+            this.data[ zero.x ][ zero.y ] !== undefined &&
+            this.data[ zero.x ][ zero.y ][ zero.z ] !== undefined )
+    {
+        return this.data[ zero.x ][ zero.y ][ zero.z ];
+    }
+    else
+    {
+        return null;
+    }
+};
+
+
+
+
+
+
 /* Stores map data (an array of room structures, exposed as .data) and provides
  * an indexing feature. */
 MumeMapData = function()
 {
     this.cachedZones = new Set();
-    // 3D array. Hopefully, JS' sparse arrays will make this memory-efficient.
-    this.rooms = [];
-
 };
 
 /* Publicly readable, guaranteed to hold REQUIRED_META_PROPS. */
 MumeMapData.prototype.metaData = null;
+
+/* Private in-memory room cache. */
+MumeMapData.prototype.rooms = null;
 
 /* These properties are expected to be found in the metadata file.
  */
@@ -374,38 +436,15 @@ MumeMapData.prototype.setMetadata = function( json )
     }
 
     this.metaData = json;
-
-    // Hopefully nudge JS into allocating a sparse Array
-    if ( this.rooms.length === 0 )
-        this.rooms = new Array( this.metaData.maxX - this.metaData.minX );
+    this.rooms = new SpatialIndex( json );
 
     return true;
-};
-
-/* Private helper to get 0-based coordinates from whatever MM2 provided */
-MumeMapData.prototype.getZeroedCoordinates = function( x, y, z )
-{
-    return {
-        x: x - this.metaData.minX,
-        y: y - this.metaData.minY,
-        z: z - this.metaData.minZ,
-    };
 };
 
 /* Private helper that feeds the in-memory cache. */
 MumeMapData.prototype.setCachedRoom = function( room )
 {
-    var zero;
-
-    zero = this.getZeroedCoordinates( room.x, room.y, room.z );
-
-    if ( this.rooms[ zero.x ] === undefined )
-        this.rooms[ zero.x ] = new Array( this.metaData.maxY - this.metaData.minY );
-
-    if ( this.rooms[ zero.x ][ zero.y ] === undefined )
-        this.rooms[ zero.x ][ zero.y ] = [];
-
-    this.rooms[ zero.x ][ zero.y ][ zero.z ] = room;
+    this.rooms.set( room.x, room.y, room.z, room );
 };
 
 /* Returns a room from the in-memory cache or null if not found. Does not
@@ -413,15 +452,12 @@ MumeMapData.prototype.setCachedRoom = function( room )
  */
 MumeMapData.prototype.getRoomAtCached = function( x, y, z )
 {
-    var zero, room;
+    var room;
 
-    zero = this.getZeroedCoordinates( x, y, z );
+    room = this.rooms.get( x, y, z );
 
-    if ( this.rooms[ zero.x ] !== undefined &&
-            this.rooms[ zero.x ][ zero.y ] !== undefined &&
-            this.rooms[ zero.x ][ zero.y ][ zero.z ] !== undefined )
+    if ( room != null )
     {
-        room = this.rooms[ zero.x ][ zero.y ][ zero.z ];
         console.log( "MumeMapData found room %s (%d) for coords %d,%d,%d",
             room.name, room.id, x, y, z );
         return room;
