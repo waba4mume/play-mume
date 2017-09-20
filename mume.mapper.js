@@ -1,29 +1,90 @@
 (function( global ) {
 'use strict';
 
-var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumeMapIndex, MumePathMachine;
+var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumeMapIndex, MumePathMachine,
+    ROOM_PIXELS, MAP_DATA_PATH,
+    SECT_UNDEFINED, SECT_INSIDE, SECT_CITY, SECT_FIELD, SECT_FOREST, SECT_HILLS,
+    SECT_MOUNTAIN, SECT_WATER_SHALLOW, SECT_WATER, SECT_WATER_NOBOAT, SECT_UNDERWATER,
+    SECT_ROAD, SECT_BRUSH, SECT_TUNNEL, SECT_CAVERN, SECT_DEATHTRAP, SECT_COUNT,
+    forEachDeferred, mapKeys;
 
-var ROOM_PIXELS = 48,
-    SECT_UNDEFINED      =  0,
-    SECT_INSIDE         =  1,
-    SECT_CITY           =  2,
-    SECT_FIELD          =  3,
-    SECT_FOREST         =  4,
-    SECT_HILLS          =  5,
-    SECT_MOUNTAIN       =  6,
-    SECT_WATER_SHALLOW  =  7,
-    SECT_WATER          =  8,
-    SECT_WATER_NOBOAT   =  9,
-    SECT_UNDERWATER     = 10,
-    SECT_ROAD           = 11,
-    SECT_BRUSH          = 12,
-    SECT_TUNNEL         = 13,
-    SECT_CAVERN         = 14,
-    SECT_DEATHTRAP      = 15,
-    SECT_COUNT = SECT_DEATHTRAP;
+ROOM_PIXELS = 48;
+SECT_UNDEFINED      =  0;
+SECT_INSIDE         =  1;
+SECT_CITY           =  2;
+SECT_FIELD          =  3;
+SECT_FOREST         =  4;
+SECT_HILLS          =  5;
+SECT_MOUNTAIN       =  6;
+SECT_WATER_SHALLOW  =  7;
+SECT_WATER          =  8;
+SECT_WATER_NOBOAT   =  9;
+SECT_UNDERWATER     = 10;
+SECT_ROAD           = 11;
+SECT_BRUSH          = 12;
+SECT_TUNNEL         = 13;
+SECT_CAVERN         = 14;
+SECT_DEATHTRAP      = 15;
+SECT_COUNT = SECT_DEATHTRAP;
+MAP_DATA_PATH = "mapdata/v1/";
 
-var MAP_DATA_PATH = "mapdata/v1/";
+/* Provides a single Deferred that waits for all Deferreds in elems to be
+ * completed. Each elem is expected to have a matching context from the
+ * contexts Array, which is provided as a first arg to the actions. The
+ * doneAction and failAction are called depending on the result of the
+ * deferreds. Returns result or a new Deferred if not provided. Avoid providing
+ * a long list of immediate (already resolved/rejected) elems as that
+ * can lead to an infinite recursion error.
+ */
+forEachDeferred = function( elems, contexts, thisArg, doneAction, failAction, result )
+{
+    var currentElem, currentContext;
 
+    if ( typeof result !== "object" )
+        result = jQuery.Deferred();
+
+    if ( doneAction == null )
+        doneAction = function() {};
+
+    if ( failAction == null )
+        failAction = function() {};
+
+    if ( elems.length === 0 )
+        return result.resolve();
+
+    currentElem = elems.pop();
+    currentContext = contexts.pop();
+
+    currentElem
+        .done( forEachDeferred.actionWrapper.bind( thisArg, doneAction, currentContext ) )
+        .fail( forEachDeferred.actionWrapper.bind( thisArg, failAction, currentContext ) )
+        .always( forEachDeferred.bind( undefined, elems, contexts, thisArg,
+            doneAction, failAction, result ) );
+
+    return result;
+};
+
+/* Private helper. Calls action with this and prepended context arg as per spec
+ * above.
+ */
+forEachDeferred.actionWrapper = function( action, currentContext )
+{
+    var args = [].slice.call( arguments, 2 );
+    args.unshift( currentContext );
+    action.apply( this, args );
+};
+
+
+/* Like map.keys(), but as an Array and IE-compatible.
+ */
+mapKeys = function( map )
+{
+    var keys;
+
+    keys = [];
+    map.forEach( function( value, key ) { keys.push( key ); } );
+    return keys;
+};
 
 
 
@@ -347,8 +408,10 @@ MumeMapData.prototype.setCachedRoom = function( room )
     this.rooms[ zero.x ][ zero.y ][ zero.z ] = room;
 };
 
-/* Private helper that digs up the room from the in-memory cache. */
-MumeMapData.prototype.getRoomAtCached = function( x, y, z, result )
+/* Returns a room from the in-memory cache or null if not found. Does not
+ * attempt to download the zone if it's missing from the cache.
+ */
+MumeMapData.prototype.getRoomAtCached = function( x, y, z )
 {
     var zero, room;
 
@@ -361,26 +424,36 @@ MumeMapData.prototype.getRoomAtCached = function( x, y, z, result )
         room = this.rooms[ zero.x ][ zero.y ][ zero.z ];
         console.log( "MumeMapData found room %s (%d) for coords %d,%d,%d",
             room.name, room.id, x, y, z );
-        result.resolve( room );
+        return room;
     }
     else
     {
         console.log( "MumeMapData did not find a room for coords %d,%d,%d",
             x, y, z );
-        result.reject();
+        return null;
     }
+};
 
-    return result;
+/* Private. */
+MumeMapData.prototype.getRoomResultAtCached = function( x, y, z, result )
+{
+    var room;
+
+    room = this.getRoomAtCached( x, y, z );
+    if ( room === null )
+        return result.reject();
+    else
+        return result.resolve( room );
 };
 
 /* Private. Stores a freshly retrieved JSON zone into the in-memory cache. */
-MumeMapData.prototype.cacheZone = function( zone, json, url )
+MumeMapData.prototype.cacheZone = function( zone, json )
 {
     var missing, i, room, count;
 
     if ( !Array.isArray( json ) )
     {
-        console.error( "Expected to find an Array in %s, got %O", url, json );
+        console.error( "Expected to find an Array for zone %s, got %O", zone, json );
         return false;
     }
 
@@ -396,7 +469,7 @@ MumeMapData.prototype.cacheZone = function( zone, json, url )
 
         if ( missing.length !== 0 )
         {
-            console.error( "Missing properties %O in room #%d of %s", missing, i, url );
+            console.error( "Missing properties %O in room #%d of zone %s", missing, i, zone );
             return false;
         }
 
@@ -409,31 +482,37 @@ MumeMapData.prototype.cacheZone = function( zone, json, url )
     return true;
 };
 
-/* Fetches a room from the cache or the server. Returns a jQuery Deferred. */
-MumeMapData.prototype.getRoomAt = function ( x, y, z )
+/* Returns the x,y zone for that room's position, or null if out of the map.
+ */
+MumeMapData.prototype.getRoomZone = function( x, y )
 {
-    var zoneX, zoneY, zone, result, url;
-
-    result = jQuery.Deferred();
+    var zoneX, zoneY, zone;
 
     if ( x < this.metaData.minX || x > this.metaData.maxX ||
             y < this.metaData.minY || y > this.metaData.maxY )
-        return result.reject();
+        return null;
 
     zoneX = x - ( x % MumeMapData.ZONE_SIZE );
     zoneY = y - ( y % MumeMapData.ZONE_SIZE );
     zone = zoneX + "," + zoneY;
 
-    if ( this.cachedZones.has( zone ) )
-        return this.getRoomAtCached( x, y, z, result );
+    return zone;
+};
 
-    console.log( "Downloading map zone %s for room %d,%d", zone, x, y );
+/* Private. */
+MumeMapData.prototype.downloadAndCacheZone = function( zone )
+{
+    var url, result;
+
+    result = jQuery.Deferred();
+
+    console.log( "Downloading map zone %s", zone );
     url = MAP_DATA_PATH + "zone/" + zone + ".json";
     jQuery.getJSON( url )
         .done( function( json )
         {
-            this.cacheZone( zone, json, url );
-            this.getRoomAtCached( x, y, z, result );
+            this.cacheZone( zone, json );
+            result.resolve();
         }.bind( this ) )
         .fail( function( jqXHR, textStatus, error )
         {
@@ -447,6 +526,119 @@ MumeMapData.prototype.getRoomAt = function ( x, y, z )
 
     return result;
 };
+
+/* Fetches a room from the cache or the server. Returns a jQuery Deferred. */
+MumeMapData.prototype.getRoomAt = function( x, y, z )
+{
+    var zone, result;
+
+    result = jQuery.Deferred();
+
+    zone = this.getRoomZone( x, y );
+    if ( zone === null )
+        return result.reject();
+
+    if ( this.cachedZones.has( zone ) )
+        return this.getRoomResultAtCached( x, y, z, result );
+
+    this.downloadAndCacheZone( zone )
+        .done( function()
+        {
+            this.getRoomResultAtCached( x, y, z, result );
+        }.bind( this ) );
+
+    return result;
+};
+
+/* Fetches rooms at an Array of x/y/z positions from the cache or the server.
+ * Returns arrays of rooms through a jQuery Deferred. The rooms are returned as
+ * soon as they are available as notify()cations and as a summary in the final
+ * resolve(). Rooms that do not exist are not part of the results.
+ */
+MumeMapData.prototype.getRoomsAt = function( positions )
+{
+    var zonesNotInCache, roomsInCache, roomsDownloaded, downloadDeferreds,
+        result, url, i, pos, zone, room, downloadResult;
+
+    result = jQuery.Deferred();
+    downloadDeferreds = [];
+    zonesNotInCache = new Map(); // zone => [ pos... ]
+    roomsInCache = [];
+    roomsDownloaded = [];
+
+    // Sort positions into rooms in cache and rooms needing a download
+    for ( i = 0; i < positions.length; ++i )
+    {
+        pos = positions[i];
+        zone = this.getRoomZone( pos.x, pos.y );
+        if ( zone === null )
+            continue;
+
+        if ( !this.cachedZones.has( zone ) )
+        {
+            if ( zonesNotInCache.has( zone ) )
+                zonesNotInCache.get( zone ).push( pos );
+            else
+            {
+                zonesNotInCache.set( zone, [ pos ] );
+
+                console.log( "Downloading map zone %s for room %d,%d", zone, pos.x, pos.y );
+                url = MAP_DATA_PATH + "zone/" + zone + ".json";
+                downloadDeferreds.push( jQuery.getJSON( url ) );
+            }
+        }
+        else
+        {
+            room = this.getRoomAtCached( pos.x, pos.y, pos.z );
+            if ( room != null )
+                roomsInCache.push( room );
+        }
+    }
+
+    // Return cached rooms immediatly through a notify
+    result.notify( roomsInCache );
+
+    // Download the rest
+    downloadResult = forEachDeferred( downloadDeferreds, mapKeys( zonesNotInCache ), this,
+        // doneAction
+        function( zone2, json )
+        {
+            var positions2, pos2, rooms2, room2, j;
+
+            console.log( "Zone %s downloaded: %O", zone2, json );
+            this.cacheZone( zone2, json );
+
+            // Send the batch of freshly downloaded rooms
+            positions2 = zonesNotInCache.get( zone2 );
+            rooms2 = [];
+            for ( j = 0; j < positions2.length; ++j )
+            {
+                pos2 = positions2[j];
+                room2 = this.getRoomAtCached( pos2.x, pos2.y, pos2.z );
+                if ( room2 != null )
+                {
+                    rooms2.push( room2 );
+                    roomsDownloaded.push( room2 );
+                }
+            }
+            result.notify( rooms2 );
+        },
+        // failAction
+        function( zone2, jqXHR, textStatus, error )
+        {
+            if ( jqXHR.status === 404 )
+                console.log( "Map zone %s does not exist: %s, %O", zone2, textStatus, error );
+                // Not an error: zones without data simply don't get output
+            else
+                console.error( "Downloading map zone %s failed: %s, %O", zone2, textStatus, error );
+        } );
+
+    // Return a summary
+    downloadResult.always( function() { result.resolve( roomsInCache.concat( roomsDownloaded ) ); } );
+
+    return result;
+};
+
 
 
 
@@ -598,7 +790,7 @@ MumeMapDisplay.buildHerePointer = function()
  */
 MumeMapDisplay.prototype.repositionHere = function( x, y )
 {
-    var i, j, roomFetchQueue, result;
+    var i, j, positions, result;
 
     this.herePointer.position = new PIXI.Point( x * ROOM_PIXELS, y * ROOM_PIXELS );
     this.herePointer.visible = true;
@@ -609,48 +801,20 @@ MumeMapDisplay.prototype.repositionHere = function( x, y )
     this.stage.y = - pointerGlobalPos.y + 300;
     console.log( "Recentering view to (r) %d,%d, (px) %d,%d", x, y, this.stage.x, this.stage.y );
 
-    roomFetchQueue = []; // Actually a stack, but who cares?
+    positions = [];
     for ( i = x - 5; i < x + 5; ++i )
         for ( j = y - 5; j < y + 5; ++j )
-            roomFetchQueue.push( { x: i, y: j, } );
-    // TODO: cache which x,y coords are already in Pixi to avoid generating tons of
-    // Deferreds every move...
+            positions.push( { x: i, y: j, z: -1 } );
 
-    result = jQuery.Deferred();
-    this.repositionHereNext( roomFetchQueue.length, roomFetchQueue, result );
+    result = this.mapData.getRoomsAt( positions )
+        .progress( function( rooms )
+        {
+            var k;
+            for ( k = 0; k < rooms.length; ++k )
+                this.layer0.addChild( MumeMapDisplay.buildRoomDisplay( rooms[k] ) );
+        }.bind( this ) );
+
     return result;
-};
-
-/* Private helper that asynchronously recurses through the roomFetchQueue until
- * all rooms are fetched and pushed into Pixi.
- */
-MumeMapDisplay.prototype.repositionHereNext = function( fetchTotal, roomFetchQueue, result )
-{
-    var fetch;
-
-    if ( roomFetchQueue.length === 0 )
-    {
-        console.log( "Done fetching %d rooms", fetchTotal );
-        result.resolve();
-    }
-    else
-    {
-        fetch = roomFetchQueue.pop();
-
-        result.notify( fetchTotal - roomFetchQueue.length, fetchTotal );
-
-        this.mapData.getRoomAt( fetch.x, fetch.y, -1 )
-            .done( function( room )
-            {
-                this.layer0.addChild( MumeMapDisplay.buildRoomDisplay( room ) );
-            }.bind( this ) )
-            .always( function()
-            {
-                this.repositionHereNext( fetchTotal, roomFetchQueue, result );
-            }.bind( this ) );
-    }
-
-    return;
 };
 
 MumeMapDisplay.prototype.refresh = function()
