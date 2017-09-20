@@ -167,9 +167,9 @@ MumePathMachine.prototype.processTag = function( event, tag )
 MumePathMachine.prototype.enterRoom = function( name, desc )
 {
     this.mapIndex.findPosByNameDesc( name, desc )
-        .done( function( positions )
+        .done( function( coordinates )
         {
-            $(this).triggerHandler( MumePathMachine.SIG_MOVEMENT, positions[0] );
+            $(this).triggerHandler( MumePathMachine.SIG_MOVEMENT, coordinates[0] );
         }.bind( this ) );
 };
 
@@ -177,7 +177,7 @@ MumePathMachine.prototype.enterRoom = function( name, desc )
 
 
 /* Queries and caches the server-hosted index of rooms.
- * For v1 format, that's a roomname+roomdesc => position index, 2.4MB total,
+ * For v1 format, that's a roomname+roomdesc => coords index, 2.4MB total,
  * split into 10kB JSON chunks.
  */
 MumeMapIndex = function()
@@ -248,19 +248,19 @@ MumeMapIndex.prototype.updateCache = function( json )
 // Private helper for findPosByNameDesc().
 MumeMapIndex.prototype.findPosByNameDescCached = function( name, desc, result, hash )
 {
-    var positions, roomInfo;
+    var coordinates, roomInfo;
 
-    positions = this.cache.get( hash );
+    coordinates = this.cache.get( hash );
     roomInfo = { name: name, desc: desc, hash: hash, };
-    if ( positions === undefined )
+    if ( coordinates === undefined )
     {
         console.log( "MumeMapIndex: unknown room %s (%O)", name, roomInfo );
         result.reject();
     }
     else
     {
-        console.log( "MumeMapIndex: found %s (%O) in %O", name, roomInfo, positions );
-        result.resolve( positions );
+        console.log( "MumeMapIndex: found %s (%O) in %O", name, roomInfo, coordinates );
+        result.resolve( coordinates );
     }
     return result;
 };
@@ -518,7 +518,7 @@ MumeMapData.prototype.cacheZone = function( zone, json )
     return true;
 };
 
-/* Returns the x,y zone for that room's position, or null if out of the map.
+/* Returns the x,y zone for that room's coords, or null if out of the map.
  */
 MumeMapData.prototype.getRoomZone = function( x, y )
 {
@@ -586,46 +586,46 @@ MumeMapData.prototype.getRoomAt = function( x, y, z )
     return result;
 };
 
-/* Fetches rooms at an Array of x/y/z positions from the cache or the server.
+/* Fetches rooms at an Array of x/y/z coords from the cache or the server.
  * Returns arrays of rooms through a jQuery Deferred. The rooms are returned as
  * soon as they are available as notify()cations and as a summary in the final
  * resolve(). Rooms that do not exist are not part of the results.
  */
-MumeMapData.prototype.getRoomsAt = function( positions )
+MumeMapData.prototype.getRoomsAt = function( coordinates )
 {
     var zonesNotInCache, roomsInCache, roomsDownloaded, downloadDeferreds,
-        result, url, i, pos, zone, room, downloadResult;
+        result, url, i, coords, zone, room, downloadResult;
 
     result = jQuery.Deferred();
     downloadDeferreds = [];
-    zonesNotInCache = new Map(); // zone => [ pos... ]
+    zonesNotInCache = new Map(); // zone => [ coords... ]
     roomsInCache = [];
     roomsDownloaded = [];
 
-    // Sort positions into rooms in cache and rooms needing a download
-    for ( i = 0; i < positions.length; ++i )
+    // Sort coordinates into rooms in cache and rooms needing a download
+    for ( i = 0; i < coordinates.length; ++i )
     {
-        pos = positions[i];
-        zone = this.getRoomZone( pos.x, pos.y );
+        coords = coordinates[i];
+        zone = this.getRoomZone( coords.x, coords.y );
         if ( zone === null )
             continue;
 
         if ( !this.cachedZones.has( zone ) )
         {
             if ( zonesNotInCache.has( zone ) )
-                zonesNotInCache.get( zone ).push( pos );
+                zonesNotInCache.get( zone ).push( coords );
             else
             {
-                zonesNotInCache.set( zone, [ pos ] );
+                zonesNotInCache.set( zone, [ coords ] );
 
-                console.log( "Downloading map zone %s for room %d,%d", zone, pos.x, pos.y );
+                console.log( "Downloading map zone %s for room %d,%d", zone, coords.x, coords.y );
                 url = MAP_DATA_PATH + "zone/" + zone + ".json";
                 downloadDeferreds.push( jQuery.getJSON( url ) );
             }
         }
         else
         {
-            room = this.getRoomAtCached( pos.x, pos.y, pos.z );
+            room = this.getRoomAtCached( coords.x, coords.y, coords.z );
             if ( room != null )
                 roomsInCache.push( room );
         }
@@ -639,18 +639,18 @@ MumeMapData.prototype.getRoomsAt = function( positions )
         // doneAction
         function( zone2, json )
         {
-            var positions2, pos2, rooms2, room2, j;
+            var coordinates2, coords2, rooms2, room2, j;
 
             console.log( "Zone %s downloaded: %O", zone2, json );
             this.cacheZone( zone2, json );
 
             // Send the batch of freshly downloaded rooms
-            positions2 = zonesNotInCache.get( zone2 );
+            coordinates2 = zonesNotInCache.get( zone2 );
             rooms2 = [];
-            for ( j = 0; j < positions2.length; ++j )
+            for ( j = 0; j < coordinates2.length; ++j )
             {
-                pos2 = positions2[j];
-                room2 = this.getRoomAtCached( pos2.x, pos2.y, pos2.z );
+                coords2 = coordinates2[j];
+                room2 = this.getRoomAtCached( coords2.x, coords2.y, coords2.z );
                 if ( room2 != null )
                 {
                     rooms2.push( room2 );
@@ -826,7 +826,7 @@ MumeMapDisplay.buildHerePointer = function()
  */
 MumeMapDisplay.prototype.repositionHere = function( x, y )
 {
-    var i, j, positions, result;
+    var i, j, coordinates, result;
 
     this.herePointer.position = new PIXI.Point( x * ROOM_PIXELS, y * ROOM_PIXELS );
     this.herePointer.visible = true;
@@ -837,12 +837,12 @@ MumeMapDisplay.prototype.repositionHere = function( x, y )
     this.stage.y = - pointerGlobalPos.y + 300;
     console.log( "Recentering view to (r) %d,%d, (px) %d,%d", x, y, this.stage.x, this.stage.y );
 
-    positions = [];
+    coordinates = [];
     for ( i = x - 5; i < x + 5; ++i )
         for ( j = y - 5; j < y + 5; ++j )
-            positions.push( { x: i, y: j, z: -1 } );
+            coordinates.push( { x: i, y: j, z: -1 } );
 
-    result = this.mapData.getRoomsAt( positions )
+    result = this.mapData.getRoomsAt( coordinates )
         .progress( function( rooms )
         {
             var k;
