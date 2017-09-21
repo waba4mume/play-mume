@@ -458,14 +458,14 @@ MumeMapData.prototype.getRoomAtCached = function( x, y, z )
 
     if ( room != null )
     {
-        console.log( "MumeMapData found room %s (%d) for coords %d,%d,%d",
-            room.name, room.id, x, y, z );
+        /*console.log( "MumeMapData found room %s (%d) for coords %d,%d,%d",
+            room.name, room.id, x, y, z );*/
         return room;
     }
     else
     {
-        console.log( "MumeMapData did not find a room for coords %d,%d,%d",
-            x, y, z );
+        /*console.log( "MumeMapData did not find a room for coords %d,%d,%d",
+            x, y, z );*/
         return null;
     }
 };
@@ -641,7 +641,7 @@ MumeMapData.prototype.getRoomsAt = function( coordinates )
         {
             var coordinates2, coords2, rooms2, room2, j;
 
-            console.log( "Zone %s downloaded: %O", zone2, json );
+            console.log( "Zone %s downloaded", zone2 );
             this.cacheZone( zone2, json );
 
             // Send the batch of freshly downloaded rooms
@@ -686,13 +686,15 @@ MumeMapDisplay = function( containerElementName, mapData )
 {
     this.mapData = mapData;
     this.containerElementName = containerElementName;
-
-    // PIXI elements
-    this.herePointer = null;
-    this.stage = null;
-    this.layer0 = null;
-    this.renderer = null;
 };
+
+MumeMapDisplay.prototype.roomDisplays = null;
+
+// PIXI elements
+MumeMapDisplay.prototype.herePointer = null;
+MumeMapDisplay.prototype.stage = null;
+MumeMapDisplay.prototype.layer0 = null;
+MumeMapDisplay.prototype.renderer = null;
 
 /* Installs the viewport into the DOM and starts loading textures etc (assets).
  * The loading continues in background, after which buildMapDisplay() is
@@ -700,6 +702,9 @@ MumeMapDisplay = function( containerElementName, mapData )
 MumeMapDisplay.prototype.loadMap = function()
 {
     var stub;
+
+    // We need the metaData to be loaded to init the SpatialIndex.
+    this.roomDisplays = new SpatialIndex( this.mapData.metaData );
 
     // Set the Pixi viewport as the content of that new window
     this.stage = new PIXI.Container();
@@ -794,8 +799,8 @@ MumeMapDisplay.buildRoomDisplay = function( room )
 
     // Position the room display in its layer
     display.position = new PIXI.Point( room.x * ROOM_PIXELS, room.y * ROOM_PIXELS );
-    console.log( "MumeMapDisplay added room %s (%d,%d) in PIXI at %O",
-        room.name, room.x, room.y, display.getGlobalPosition() );
+    /*console.log( "MumeMapDisplay added room %s (%d,%d) in PIXI at %O",
+        room.name, room.x, room.y, display.getGlobalPosition() );*/
 
     display.cacheAsBitmap = true;
     return display;
@@ -838,16 +843,25 @@ MumeMapDisplay.prototype.repositionHere = function( x, y )
     console.log( "Recentering view to (r) %d,%d, (px) %d,%d", x, y, this.stage.x, this.stage.y );
 
     coordinates = [];
-    for ( i = x - 5; i < x + 5; ++i )
-        for ( j = y - 5; j < y + 5; ++j )
-            coordinates.push( { x: i, y: j, z: -1 } );
+    for ( i = x - 20; i < x + 20; ++i )
+        for ( j = y - 20; j < y + 20; ++j )
+            if ( this.roomDisplays.get( i, j, -1 ) == null )
+                coordinates.push( { x: i, y: j, z: -1 } );
 
     result = this.mapData.getRoomsAt( coordinates )
         .progress( function( rooms )
         {
-            var k;
+            var k, display, room;
             for ( k = 0; k < rooms.length; ++k )
-                this.layer0.addChild( MumeMapDisplay.buildRoomDisplay( rooms[k] ) );
+            {
+                room = rooms[k];
+                display = MumeMapDisplay.buildRoomDisplay( room );
+                if ( this.roomDisplays.get( room.x, room.y, room.z ) == null )
+                {
+                    this.roomDisplays.set( room.x, room.y, room.z, display );
+                    this.layer0.addChild( display );
+                }
+            }
         }.bind( this ) );
 
     return result;
