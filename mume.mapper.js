@@ -838,8 +838,8 @@ MumeMapDisplay.prototype.repositionHere = function( x, y )
 
     // Scroll to make the herePointer visible
     var pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
-    this.stage.x = - pointerGlobalPos.x + 400;
-    this.stage.y = - pointerGlobalPos.y + 300;
+    this.stage.x += - pointerGlobalPos.x + 400;
+    this.stage.y += - pointerGlobalPos.y + 300;
     console.log( "Recentering view to (r) %d,%d, (px) %d,%d", x, y, this.stage.x, this.stage.y );
 
     coordinates = [];
