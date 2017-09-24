@@ -367,7 +367,10 @@ SpatialIndex.prototype.get = function( x, y, z )
  * an indexing feature. */
 MumeMapData = function()
 {
+    /* These zones are currently in-memory. */
     this.cachedZones = new Set();
+    /* These zones are known not to exist on the server. */
+    this.nonExistentZones = new Set();
 };
 
 /* Publicly readable, guaranteed to hold REQUIRED_META_PROPS. */
@@ -571,7 +574,7 @@ MumeMapData.prototype.getRoomAt = function( x, y, z )
     result = jQuery.Deferred();
 
     zone = this.getRoomZone( x, y );
-    if ( zone === null )
+    if ( zone === null || this.nonExistentZones.has( zone ) )
         return result.reject();
 
     if ( this.cachedZones.has( zone ) )
@@ -610,7 +613,11 @@ MumeMapData.prototype.getRoomsAt = function( coordinates )
         if ( zone === null )
             continue;
 
-        if ( !this.cachedZones.has( zone ) )
+        if ( this.nonExistentZones.has( zone ) )
+        {
+            // Do nothing if the zone doesn't exist on the server
+        }
+        else if ( !this.cachedZones.has( zone ) )
         {
             if ( zonesNotInCache.has( zone ) )
                 zonesNotInCache.get( zone ).push( coords );
@@ -663,8 +670,11 @@ MumeMapData.prototype.getRoomsAt = function( coordinates )
         function( zone2, jqXHR, textStatus, error )
         {
             if ( jqXHR.status === 404 )
+            {
+                this.nonExistentZones.add( zone2 );
                 console.log( "Map zone %s does not exist: %s, %O", zone2, textStatus, error );
                 // Not an error: zones without data simply don't get output
+            }
             else
                 console.error( "Downloading map zone %s failed: %s, %O", zone2, textStatus, error );
         } );
