@@ -26,7 +26,7 @@ SECT_BRUSH          = 12;
 SECT_TUNNEL         = 13;
 SECT_CAVERN         = 14;
 SECT_DEATHTRAP      = 15;
-SECT_COUNT = SECT_DEATHTRAP;
+SECT_COUNT          = 16;
 MAP_DATA_PATH = "mapdata/v1/";
 
 /* Provides a single Deferred that waits for all Deferreds in elems to be
