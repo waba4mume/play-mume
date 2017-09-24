@@ -7,7 +7,7 @@ var MumeMap, MumeXmlParser, MumeMapDisplay, MumeMapData, MumeMapIndex, MumePathM
     SECT_UNDEFINED, SECT_INSIDE, SECT_CITY, SECT_FIELD, SECT_FOREST, SECT_HILLS,
     SECT_MOUNTAIN, SECT_WATER_SHALLOW, SECT_WATER, SECT_WATER_NOBOAT, SECT_UNDERWATER,
     SECT_ROAD, SECT_BRUSH, SECT_TUNNEL, SECT_CAVERN, SECT_DEATHTRAP, SECT_COUNT,
-    forEachDeferred, mapKeys;
+    forEachDeferred, mapKeys, translitUnicodeToAscii;
 
 ROOM_PIXELS = 48;
 SECT_UNDEFINED      =  0;
@@ -87,7 +87,42 @@ mapKeys = function( map )
     return keys;
 };
 
+/* Poor man's iconv. We know we don't need to handle anything outside of
+ * latin1, and the lightest JavaScript iconv lib weights 300kB.
+ */
+translitUnicodeToAscii = function( unicode )
+{
+    var ascii, i, tred;
 
+    ascii = "";
+    for ( i = 0; i < unicode.length; ++i )
+    {
+        tred = translitUnicodeToAscii.table[unicode[i]];
+        if ( tred != undefined )
+            ascii += tred;
+        else
+            ascii += unicode[i];
+        /* String append is hopefully optimized. Otherwise, String.replace(...,
+         * func) may be faster. Either way, I'm not sure it matters. */
+    }
+
+    return ascii;
+};
+
+translitUnicodeToAscii.table = {
+                '\xA1': '!',    '\xA2': 'c',  '\xA3': 'L',  '\xA4': 'x',   '\xA5': 'Y',   '\xA6': '|',   '\xA7': 'P',
+   '\xA8': '"', '\xA9': '(C) ', '\xAA': 'a',  '\xAB': '<<', '\xAC': '-',   '\xAD': ' ',   '\xAE': '(R)', '\xAF': '-',
+   '\xB0': '0', '\xB1': '+/-',  '\xB2': '2',  '\xB3': '3',  '\xB4': "'",   '\xB5': 'u',   '\xB6': 'P',   '\xB7': '.',
+   '\xB8': ',', '\xB9': '1',    '\xBA': '0',  '\xBB': '>>', '\xBC': '1/4', '\xBD': '1/2', '\xBE': '3/4', '\xBF': '?',
+   '\xC0': 'A', '\xC1': 'A',    '\xC3': 'A',  '\xC4': 'A',  '\xC5': 'A',   '\xC6': 'A',   '\xC7': 'AE',  '\xC8': 'C',
+   '\xC8': 'E', '\xC9': 'E',    '\xCA': 'Z',  '\xCB': 'E',  '\xCC': 'I',   '\xCD': 'I',   '\xCE': 'I',   '\xCF': 'I',
+   '\xD0': 'D', '\xD1': 'N',    '\xD2': 'O',  '\xD3': 'O',  '\xD4': 'O',   '\xD5': 'O',   '\xD6': 'O',   '\xD7': 'x',
+   '\xD8': 'O', '\xD9': 'U',    '\xDA': 'U',  '\xDB': 'U',  '\xDC': 'U',   '\xDD': 'Y',   '\xDE': 'TH',  '\xDF': 'ss',
+   '\xE0': 'a', '\xE1': 'a',    '\xE2': 'a',  '\xE3': 'a',  '\xE4': 'a',   '\xE5': 'a',   '\xE6': 'ae',  '\xE7': 'c',
+   '\xE8': 'e', '\xE9': 'z',    '\xEA': 'z',  '\xEB': 'e',  '\xEC': 'i',   '\xED': 'i',   '\xEE': 'i',   '\xEF': 'i',
+   '\xF0': 'd', '\xF1': 'n',    '\xF2': 'o',  '\xF3': 'o',  '\xF4': 'o',   '\xF5': 'o',   '\xF6': 'o',   '\xF7': '/',
+   '\xF8': 'o', '\xF9': 'u',    '\xFA': 'u',  '\xFB': 'u',  '\xFC': 'u',   '\xFD': 'y',   '\xFE': 'th',  '\xFF': 'y',
+};
 
 
 /* This is the "entry point" to this library for the rest of the code. */
@@ -213,13 +248,8 @@ MumeMapIndex.hashNameDesc = function( name, desc )
     desc = MumeMapIndex.sanitizeString( desc );
     namedesc = name + desc;
 
-    // For maximum MD5 compatibility, converts namedesc into blob, discarding
-    // all chars that are not plain ASCII.
-    // String.replace(..., func) is probably faster, but I'm not sure we care.
-    blob = "";
-    for ( i = 0; i < namedesc.length;  ++i )
-        if ( namedesc.charCodeAt( i ) < 128 )
-            blob += namedesc.charAt( i );
+    // MMapper2 provides pure-ASCII strings only
+    blob = translitUnicodeToAscii( namedesc );
 
     hash = SparkMD5.hash( blob );
     return hash;
