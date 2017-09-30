@@ -17,13 +17,13 @@ DecafMUD, like this:
         play/           # Clone of https://github.com/waba4mume/play-mume/ ,
                         # point your users here (/mume/play/)
 
-There is a "Download ZIP" button in the bottom right section of each of these
-links, or just use Git.
+There is a `Clone or download > Download ZIP` green button in the top right
+section of each of these links, or just use Git.
 
-Make sure to download the right branch!
-- `master` is the stable version (ready to play)
-- `input-filter` and `mapper` are the respective in-progress branches for the
-  mapper project.
+Make sure to download the right branches!
+- For the stable version (ready to play): use the default `master` branches.
+- For the experimental version with a mapper, download `input-filter` from
+  DecafMUD and `mapper` from play-mume.
 
 ## Compilation
 
@@ -44,10 +44,11 @@ browser).
 
 Setting up a production server is outside of the scope of this document, but
 for testing purposes you can use:
-- https://code.google.com/p/mongoose/ on Windows (and Mac?)
-- `python -m SimpleHTTPServer` or `python -m http.server` on GNU/Linux. After
-  one of these commands starts succesfully, point your browser to
-  http://127.0.0.1:8000/play/.
+- https://cesanta.com/ (untested!) for Windows.
+- `python -m SimpleHTTPServer` or `python -m http.server` on GNU/Linux.
+
+After one of these commands starts succesfully, point your browser to
+http://127.0.0.1:8000/play/.
 
 ## Testing without a WebSocket Server
 
