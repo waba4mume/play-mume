@@ -25,6 +25,17 @@ Make sure to download the right branch!
 - `input-filter` and `mapper` are the respective in-progress branches for the
   mapper project.
 
+## Compilation
+
+Some of the code will need compiling from TypeScript (`src/*`) to JavaScript
+(`build/*`). You will need to install TypeScript compiler from
+https://www.typescriptlang.org and run in `play`:
+
+  tsc -p .
+
+TypeScript helps catching bugs before anybody even tests the code, letting me
+produce more features in less time.
+
 ## Setting Up a Web Server
 
 The map display works only if served over HTTP(S), as opposed to just opening

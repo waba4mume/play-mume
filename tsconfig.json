@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "module": "commonjs", // Classic IIFE for now
+        "target": "es5",
+        "lib": [
+            "ES5",
+            "DOM",             // for jQuery
+            "ES2015.Iterable", // for jQuery
+        ],
+        "strict": true,
+        "preserveConstEnums": true,
+        "outDir": "built",
+    },
+    "include": [
+        "src/**/*",
+        "libs/*.d.ts",
+    ],
+}

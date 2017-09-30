@@ -1,2 +1,4 @@
 .*.swp
 libs/*.js
+built/.*.js
+mapdata
