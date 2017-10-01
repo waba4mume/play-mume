@@ -336,40 +336,69 @@ class MumeMapIndex
 }
 
 
+/* This is a RoomCoords shifted by metaData.minX/Y/Z to fit a zero-based Array. */
+class ZeroedRoomCoords
+{
+    private preventDuckTyping: any;
 
-type Room3DArray = Array<Array<Array<Room>>>;;
+    public x: number;
+    public y: number;
+    public z: number;
+
+    constructor( x: number, y: number, z: number )
+    {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+}
+
+/* Room coordinates, comprised in metaData.minX .. maxX etc. */
+class RoomCoords
+{
+    private preventDuckTyping: any;
+
+    public x: number;
+    public y: number;
+    public z: number;
+
+    constructor( x: number, y: number, z: number )
+    {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+}
 
 /* Stores stuff in a x/y/z-indexed 3D array. The coordinates must be within the
  * minX/maxX/etc bounds of the metaData.
  */
-class SpatialIndex
+class SpatialIndex<T>
 {
     private readonly metaData: MapMetaData;
-    private data: Room3DArray;
+    private data: Array<Array<Array<T>>>;
 
     constructor( metaData: MapMetaData )
     {
         this.metaData = metaData;
 
-        // 3D array. Hopefully, JS' sparse arrays will make this memory-efficient.
+        // Hopefully, JS' sparse arrays will make this memory-efficient.
         this.data = new Array( this.metaData.maxX - this.metaData.minX );
     }
 
     /* Private helper to get 0-based coordinates from whatever MM2 provided */
-    private getZeroedCoordinates( x: number, y: number, z: number ): any
+    private getZeroedCoordinates( pos: RoomCoords ): ZeroedRoomCoords
     {
-        return {
-            x: x - this.metaData.minX,
-            y: y - this.metaData.minY,
-            z: z - this.metaData.minZ,
-        };
+        return new ZeroedRoomCoords(
+            pos.x - this.metaData.minX,
+            pos.y - this.metaData.minY,
+            pos.z - this.metaData.minZ,
+        );
     }
 
-    public set( x: number, y: number, z: number, what: any ): void
+    public set( c: RoomCoords, what: T ): void
     {
-        let zero;
-
-        zero = this.getZeroedCoordinates( x, y, z );
+        let zero = this.getZeroedCoordinates( c );
 
         if ( this.data[ zero.x ] === undefined )
             this.data[ zero.x ] = new Array( this.metaData.maxY - this.metaData.minY );
@@ -381,11 +410,9 @@ class SpatialIndex
     };
 
     /* Public. */
-    public get( x: number, y: number, z: number ): any
+    public get( c: RoomCoords ): T | null
     {
-        var zero, what;
-
-        zero = this.getZeroedCoordinates( x, y, z );
+        let zero = this.getZeroedCoordinates( c );
 
         if ( this.data[ zero.x ] !== undefined &&
                 this.data[ zero.x ][ zero.y ] !== undefined &&
@@ -429,6 +456,11 @@ class Room
     z: number = 0;
     exits: Array<any> = [];
     // ...
+
+    public coords(): RoomCoords
+    {
+        return new RoomCoords( this.x, this.y, this.z );
+    }
 }
 
 /* Stores map data (an array of room structures, exposed as .data) and provides
@@ -442,7 +474,7 @@ class MumeMapData
     /* Publicly readable, guaranteed to hold REQUIRED_META_PROPS. */
     public metaData: MapMetaData | null;
     /* Private in-memory room cache. */
-    private rooms: SpatialIndex | null;
+    private rooms: SpatialIndex<Room> | null;
 
     // Arda is split into JSON files that wide.
     private static readonly ZONE_SIZE = 20;
@@ -487,7 +519,7 @@ class MumeMapData
         }
 
         this.metaData = <MapMetaData>json;
-        this.rooms = new SpatialIndex( json );
+        this.rooms = new SpatialIndex<Room>( json );
 
         return true;
     };
@@ -495,15 +527,15 @@ class MumeMapData
     /* Private helper that feeds the in-memory cache. */
     private setCachedRoom( room: Room ): void
     {
-        this.rooms.set( room.x, room.y, room.z, room );
+        this.rooms.set( room.coords(), room );
     };
 
     /* Returns a room from the in-memory cache or null if not found. Does not
      * attempt to download the zone if it's missing from the cache.
      */
-    public getRoomAtCached( x: number, y: number, z: number ): any
+    public getRoomAtCached( c: RoomCoords ): any
     {
-        let room = this.rooms.get( x, y, z );
+        let room = this.rooms.get( c );
 
         if ( room != null )
         {
@@ -519,10 +551,10 @@ class MumeMapData
         }
     };
 
-    private getRoomResultAtCached( x: number, y: number, z: number,
+    private getRoomResultAtCached( c: RoomCoords,
         result: JQueryDeferred<any> ): JQueryDeferred<any>
     {
-        let room = this.getRoomAtCached( x, y, z );
+        let room = this.getRoomAtCached( c );
         if ( room === null )
             return result.reject();
         else
@@ -565,7 +597,7 @@ class MumeMapData
 
     /* Returns the x,y zone for that room's coords, or null if out of the map.
      */
-    public getRoomZone( x: number, y: number ): string?
+    public getRoomZone( x: number, y: number ): string | null
     {
         if ( x < this.metaData.minX || x > this.metaData.maxX ||
                 y < this.metaData.minY || y > this.metaData.maxY )
@@ -605,21 +637,21 @@ class MumeMapData
     };
 
     /* Fetches a room from the cache or the server. Returns a jQuery Deferred. */
-    public getRoomAt( x: number, y: number, z: number ): JQueryDeferred<any>
+    public getRoomAt( c: RoomCoords ): JQueryDeferred<any>
     {
         let result = jQuery.Deferred();
 
-        let zone = this.getRoomZone( x, y );
+        let zone = this.getRoomZone( c.x, c.y );
         if ( zone === null || this.nonExistentZones.has( zone ) )
             return result.reject();
 
         if ( this.cachedZones.has( zone ) )
-            return this.getRoomResultAtCached( x, y, z, result );
+            return this.getRoomResultAtCached( c, result );
 
         this.downloadAndCacheZone( zone )
             .done( () =>
             {
-                this.getRoomResultAtCached( x, y, z, result );
+                this.getRoomResultAtCached( c, result );
             } );
 
         return result;
@@ -630,7 +662,7 @@ class MumeMapData
      * soon as they are available as notify()cations and as a summary in the final
      * resolve(). Rooms that do not exist are not part of the results.
      */
-    public getRoomsAt( coordinates: any ): JQueryDeferred<Array<any>>
+    public getRoomsAt( coordinates: Array<RoomCoords> ): JQueryDeferred<Array<Room>>
     {
         let result = jQuery.Deferred();
         let downloadDeferreds = [];
@@ -665,7 +697,7 @@ class MumeMapData
             }
             else
             {
-                const room = this.getRoomAtCached( coords.x, coords.y, coords.z );
+                const room = this.getRoomAtCached( coords );
                 if ( room != null )
                     roomsInCache.push( room );
             }
@@ -727,7 +759,7 @@ class MumeMapDisplay
 {
     private mapData: MumeMapData;
     private containerElementName: string;
-    private roomDisplays: SpatialIndex;
+    private roomDisplays: SpatialIndex<PIXI.Container>;
 
     // PIXI elements
     private herePointer: PIXI.Container;
@@ -808,7 +840,7 @@ class MumeMapDisplay
 
     /* Returns the graphical structure for a single room for rendering (base
      * texture, walls, flags etc). */
-    private static buildRoomDisplay( room: any )
+    private static buildRoomDisplay( room: any ): PIXI.Container
     {
         let display = new PIXI.Container();
 
@@ -878,28 +910,32 @@ class MumeMapDisplay
         this.herePointer.visible = true;
 
         // Scroll to make the herePointer visible
-        var pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
+        let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
         this.stage.x += - pointerGlobalPos.x + 400;
         this.stage.y += - pointerGlobalPos.y + 300;
         console.log( "Recentering view to (r) %d,%d, (px) %d,%d", x, y, this.stage.x, this.stage.y );
 
-        let coordinates = [];
+        let coordinates: Array<RoomCoords> = [];
         for ( let i = x - 20; i < x + 20; ++i )
+        {
             for ( let j = y - 20; j < y + 20; ++j )
-                if ( this.roomDisplays.get( i, j, -1 ) == null )
-                    coordinates.push( { x: i, y: j, z: -1 } );
+            {
+                let c = new RoomCoords( i, j, -1 );
+                if ( this.roomDisplays.get( c ) == null )
+                    coordinates.push( c );
+            }
+        }
 
         let result = this.mapData.getRoomsAt( coordinates )
-            .progress( ( rooms: Array<any> ) =>
+            .progress( ( rooms: Array<Room> ) =>
             {
-                var k, display, room;
-                for ( k = 0; k < rooms.length; ++k )
+                for ( let k = 0; k < rooms.length; ++k )
                 {
-                    room = rooms[k];
-                    display = MumeMapDisplay.buildRoomDisplay( room );
-                    if ( this.roomDisplays.get( room.x, room.y, room.z ) == null )
+                    let room = rooms[k];
+                    let display = MumeMapDisplay.buildRoomDisplay( room );
+                    if ( this.roomDisplays.get( room.coords() ) == null )
                     {
-                        this.roomDisplays.set( room.x, room.y, room.z, display );
+                        this.roomDisplays.set( room.coords(), display );
                         this.layer0.addChild( display );
                     }
                 }
