@@ -430,6 +430,7 @@ class SpatialIndex<T>
 
 
 
+// This is what we load from the server.
 class MapMetaData
 {
     /* The default values are never used and only make sure we can compare the
@@ -444,8 +445,11 @@ class MapMetaData
     roomsCount: number = 0;
 }
 
-class Room
+// This is what we load from the server.
+class RoomData
 {
+    [key: string] : any;
+
     /* The default values are never used and only make sure we can compare the
      * declared vs. downloaded properties at runtime. */
     name: string = "";
@@ -456,10 +460,20 @@ class Room
     z: number = 0;
     exits: Array<any> = [];
     // ...
+}
+
+class Room
+{
+    public data: RoomData;
+
+    constructor( data: RoomData )
+    {
+        this.data = data;
+    }
 
     public coords(): RoomCoords
     {
-        return new RoomCoords( this.x, this.y, this.z );
+        return new RoomCoords( this.data.x, this.data.y, this.data.z );
     }
 }
 
@@ -573,11 +587,11 @@ class MumeMapData
         let count = 0;
         for ( let i = 0; i < json.length; ++i )
         {
-            let room = json[ i ];
+            let rdata: RoomData = json[ i ];
 
             let missing = new Array<string>();
-            for ( let prop in new Room() )
-                if ( !json.hasOwnProperty( prop ) )
+            for ( let prop in new RoomData() )
+                if ( !rdata.hasOwnProperty( prop ) )
                     missing.push( prop );
 
             if ( missing.length !== 0 )
@@ -586,7 +600,7 @@ class MumeMapData
                 return false;
             }
 
-            this.setCachedRoom( room );
+            this.setCachedRoom( new Room( rdata ) );
             ++count;
         }
 
@@ -840,12 +854,12 @@ class MumeMapDisplay
 
     /* Returns the graphical structure for a single room for rendering (base
      * texture, walls, flags etc). */
-    private static buildRoomDisplay( room: any ): PIXI.Container
+    private static buildRoomDisplay( room: Room ): PIXI.Container
     {
         let display = new PIXI.Container();
 
         // load a PNG as background (sector type)
-        let imgPath = MumeMapDisplay.getSectorAssetPath( room.sector );
+        let imgPath = MumeMapDisplay.getSectorAssetPath( room.data.sector );
         let sector = new PIXI.Sprite( PIXI.loader.resources[ imgPath ].texture );
         sector.height = sector.width = ROOM_PIXELS; // Just in case we got a wrong PNG here
         display.addChild( sector );
@@ -864,7 +878,7 @@ class MumeMapDisplay
             // XXX: room["dir"] syntax may break some Javascript engine
             // optimizations, test it (with a complete map) and refactor if
             // needed.
-            if ( typeof room[ border[0] ] !== "number" )
+            if ( typeof room.data[ border[0] ] !== "number" )
             {
                 borders.moveTo( border[1], border[2] );
                 borders.lineTo( border[3], border[4] );
@@ -873,9 +887,9 @@ class MumeMapDisplay
         display.addChild( borders );
 
         // Position the room display in its layer
-        display.position = new PIXI.Point( room.x * ROOM_PIXELS, room.y * ROOM_PIXELS );
-        /*console.log( "MumeMapDisplay added room %s (%d,%d) in PIXI at %O",
-            room.name, room.x, room.y, display.getGlobalPosition() );*/
+        display.position = new PIXI.Point( room.data.x * ROOM_PIXELS, room.data.y * ROOM_PIXELS );
+        /*console.log( "MumeMapDisplay added room %s (%d,%d) in PIXI at local:%O, global:%O",
+            room.data.name, room.data.x, room.data.y, display.position, display.getGlobalPosition() );*/
 
         display.cacheAsBitmap = true;
         return display;
