@@ -4,8 +4,11 @@
         "target": "es5",
         "lib": [
             "ES5",
-            "DOM",             // for jQuery
-            "ES2015.Iterable", // for jQuery
+            // Both for jQuery
+            "DOM",
+            "ES2015.Iterable",
+            // Iterable declares containers as generics through an interface, but lack the implementation
+            "ES2015.Collection",
         ],
         "strict": true,
         "preserveConstEnums": true,
