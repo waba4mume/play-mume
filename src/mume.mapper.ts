@@ -20,52 +20,31 @@ const SECT_DEATHTRAP      = 15;
 const SECT_COUNT          = 16;
 const MAP_DATA_PATH = "mapdata/v1/";
 
-/* Provides a single Deferred that waits for all Deferreds in elems to be
- * completed. Each elem is expected to have a matching context from the
- * contexts Array, which is provided as a first arg to the actions. The
- * doneAction and failAction are called depending on the result of the
- * deferreds. Returns result or a new Deferred if not provided. Avoid providing
- * a long list of immediate (already resolved/rejected) elems as that
- * can lead to an infinite recursion error.
- */
-function forEachDeferred( elems: Array<JQueryPromise<any>>, contexts: Array<any>,
-    thisArg: any, doneAction: Function, failAction: Function,
-    result?: JQueryDeferred<any> ): JQueryDeferred<any>
+/* Like JQuery.when(), but the master Promise is resolved only when all
+ * promises are resolved or rejected, not at the first rejection. */
+function whenAll( deferreds: Array<JQueryPromise<any>> )
 {
-    if ( typeof result !== "object" )
-        result = jQuery.Deferred();
+    let master: JQueryDeferred<any> = jQuery.Deferred();
 
-    if ( doneAction == null )
-        doneAction = function() {};
+    if ( deferreds.length === 0 )
+        return master.resolve();
 
-    if ( failAction == null )
-        failAction = function() {};
+    let pending = new Set<JQueryPromise<any>>();
+    for ( let dfr of deferreds )
+        pending.add( dfr );
 
-    let currentElem = elems.pop();
-    if ( currentElem == undefined )
-        return result.resolve();
+    for ( let dfr of deferreds )
+    {
+        dfr.always( () =>
+        {
+            pending.delete( dfr );
+            if ( pending.size === 0 )
+                master.resolve();
+        } );
+    }
 
-    let currentContext = contexts.pop();
-
-    currentElem
-        .done( forEachDeferredActionWrapper.bind( thisArg, doneAction, currentContext ) )
-        .fail( forEachDeferredActionWrapper.bind( thisArg, failAction, currentContext ) )
-        .always( forEachDeferred.bind( undefined, elems, contexts, thisArg,
-            doneAction, failAction, result ) );
-
-    return result;
-};
-
-/* Private helper. Calls action with this and prepended context arg as per spec
- * above.
- */
-function forEachDeferredActionWrapper( this: any, action: Function, currentContext: any )
-{
-    var args = [].slice.call( arguments, 2 );
-    args.unshift( currentContext );
-    action.apply( this, args );
-};
-
+    return master;
+}
 
 /* Like map.keys(), but as an Array and IE-compatible.
  */
@@ -148,6 +127,7 @@ class MumeMap
     {
         this.display.repositionHere( x, y ).done( () =>
         {
+            console.log("refreshing the display");
             this.display.refresh();
         } );
     }
@@ -368,6 +348,11 @@ class RoomCoords
         this.y = y;
         this.z = z;
     }
+
+    public toString(): string
+    {
+        return `RoomCoords(${this.x}, ${this.y}, ${this.z})`;
+    }
 }
 
 /* Stores stuff in a x/y/z-indexed 3D array. The coordinates must be within the
@@ -575,16 +560,17 @@ class MumeMapData
             return result.resolve( room );
     };
 
-    /* Private. Stores a freshly retrieved JSON zone into the in-memory cache. */
-    private cacheZone( zone: string, json: any ): boolean
+    /* Stores a freshly retrieved JSON zone into the in-memory cache. Returns
+     * the rooms added to the cache. */
+    private cacheZone( zone: string, json: any ): Array<Room>
     {
         if ( !Array.isArray( json ) )
         {
             console.error( "Expected to find an Array for zone %s, got %O", zone, json );
-            return false;
+            return [];
         }
 
-        let count = 0;
+        let cached = new Array<Room>();
         for ( let i = 0; i < json.length; ++i )
         {
             let rdata: RoomData = json[ i ];
@@ -597,16 +583,17 @@ class MumeMapData
             if ( missing.length !== 0 )
             {
                 console.error( "Missing properties %O in room #%d of zone %s", missing, i, zone );
-                return false;
+                return cached; // but do not mark the zone as cached - we'll retry it
             }
 
-            this.setCachedRoom( new Room( rdata ) );
-            ++count;
+            let room = new Room( rdata );
+            this.setCachedRoom( room );
+            cached.push( room );
         }
 
-        console.log( "MumeMapData cached %d rooms for zone %s", count, zone );
+        console.log( "MumeMapData cached %d rooms for zone %s", cached, zone );
         this.cachedZones.add( zone );
-        return true;
+        return cached;
     };
 
     /* Returns the x,y zone for that room's coords, or null if out of the map.
@@ -672,22 +659,23 @@ class MumeMapData
     };
 
     /* Fetches rooms at an Array of x/y/z coords from the cache or the server.
-     * Returns arrays of rooms through a jQuery Deferred. The rooms are returned as
-     * soon as they are available as notify()cations and as a summary in the final
-     * resolve(). Rooms that do not exist are not part of the results.
+     * Returns arrays of rooms through a jQuery Deferred. Partial results are
+     * returned as soon as the rooms are available as notify()cations, and the
+     * complete array of rooms is also returned when the Promise is resolved.
+     * Rooms that do not exist are not part of the results.
      */
-    public getRoomsAt( coordinates: Array<RoomCoords> ): JQueryDeferred<Array<Room>>
+    public getRoomsAt( coordinates: Array<RoomCoords> ): JQueryPromise<Array<Room>>
     {
         let result = jQuery.Deferred();
-        let downloadDeferreds = [];
-        let zonesNotInCache = new Map<string, any>(); // zone => [ coords... ]
-        let roomsInCache: Array<any> = [];
-        let roomsDownloaded: Array<any> = [];
+        let downloads: Array<{ zone: string, dfr: JQueryXHR }> = [];
+        let downloadDeferreds: Array<JQueryXHR> = [];
+        let zonesNotInCache = new Map<string, Set<RoomCoords>>();
+        let roomsInCache: Array<Room> = [];
+        let roomsDownloaded: Array<Room> = [];
 
         // Sort coordinates into rooms in cache and rooms needing a download
-        for ( let i = 0; i < coordinates.length; ++i )
+        for ( let coords of coordinates )
         {
-            let coords = coordinates[i];
             let zone = this.getRoomZone( coords.x, coords.y );
             if ( zone === null )
                 continue;
@@ -698,15 +686,20 @@ class MumeMapData
             }
             else if ( !this.cachedZones.has( zone ) )
             {
-                if ( zonesNotInCache.has( zone ) )
-                    zonesNotInCache.get( zone ).push( coords );
+                let zoneCoords = zonesNotInCache.get( zone );
+                if ( zoneCoords )
+                    zoneCoords.add( coords );
                 else
                 {
-                    zonesNotInCache.set( zone, [ coords ] );
+                    zoneCoords = new Set<RoomCoords>();
+                    zoneCoords.add( coords );
+                    zonesNotInCache.set( zone, zoneCoords );
 
                     console.log( "Downloading map zone %s for room %d,%d", zone, coords.x, coords.y );
                     const url = MAP_DATA_PATH + "zone/" + zone + ".json";
-                    downloadDeferreds.push( jQuery.getJSON( url ) );
+                    let deferred = jQuery.getJSON( url );
+                    downloads.push( { zone: zone, dfr: deferred } );
+                    downloadDeferreds.push( deferred );
                 }
             }
             else
@@ -720,44 +713,44 @@ class MumeMapData
         // Return cached rooms immediatly through a notify
         result.notify( roomsInCache );
 
-        // Download the rest
-        let downloadResult = forEachDeferred( downloadDeferreds, mapKeys( zonesNotInCache ), this,
-            // doneAction
-            function( zone2: string, json: any )
-            {
-                console.log( "Zone %s downloaded", zone2 );
-                this.cacheZone( zone2, json );
-
-                // Send the batch of freshly downloaded rooms
-                let coordinates2 = zonesNotInCache.get( zone2 );
-                let rooms2 = [];
-                for ( let j = 0; j < coordinates2.length; ++j )
+        // Async-download the rest (this is out of first for() for legibility only)
+        for ( let download of downloads )
+        {
+            download.dfr
+                .done( ( json: any ) =>
                 {
-                    let coords2 = coordinates2[j];
-                    let room2 = this.getRoomAtCached( coords2.x, coords2.y, coords2.z );
-                    if ( room2 != null )
+                    console.log( "Zone %s downloaded", download.zone );
+                    let neededCoords = zonesNotInCache.get( download.zone );
+                    if ( neededCoords == undefined )
+                        return console.error( "Bug: inconsistent download list" );
+
+                    let neededCoordsStr = new Set<string>(); // Equivalent Coords are not === equal
+                    neededCoords.forEach( ( c ) => neededCoordsStr.add( c.toString() ) );
+
+                    let downloaded = this.cacheZone( download.zone, json );
+                    let neededRooms = downloaded
+                        .filter( ( r ) => neededCoordsStr.has( r.coords().toString() ) );
+
+                    // Send the batch of freshly downloaded rooms
+                    roomsDownloaded.push( ...neededRooms );
+                    result.notify( neededRooms );
+                } )
+                .fail( ( dfr: JQueryXHR, textStatus: string, error: string ) =>
+                {
+                    if ( dfr.status === 404 )
                     {
-                        rooms2.push( room2 );
-                        roomsDownloaded.push( room2 );
+                        this.nonExistentZones.add( download.zone );
+                        console.log( "Map zone %s does not exist: %s, %O", download.zone, textStatus, error );
+                        // Not an error: zones without data simply don't get output
                     }
-                }
-                result.notify( rooms2 );
-            },
-            // failAction
-            function( zone2: string, jqXHR: JQueryXHR, textStatus: string, error: string )
-            {
-                if ( jqXHR.status === 404 )
-                {
-                    this.nonExistentZones.add( zone2 );
-                    console.log( "Map zone %s does not exist: %s, %O", zone2, textStatus, error );
-                    // Not an error: zones without data simply don't get output
-                }
-                else
-                    console.error( "Downloading map zone %s failed: %s, %O", zone2, textStatus, error );
-            } );
+                    else
+                        console.error( "Downloading map zone %s failed: %s, %O", download.zone, textStatus, error );
+                } );
+        }
 
-        // Return a summary
-        downloadResult.always( function() { result.resolve( roomsInCache.concat( roomsDownloaded ) ); } );
+        // Return the whole batch when done
+        let allRooms = roomsInCache.concat( roomsDownloaded );
+        whenAll( downloadDeferreds ).done( () => result.resolve( allRooms ) );
 
         return result;
     }
@@ -918,7 +911,7 @@ class MumeMapDisplay
     /* Repositions the HerePointer (yellow square), centers the view, and fetches
      * nearby rooms for Pixi. Does not refresh the view.
      */
-    public repositionHere( x: number, y: number ): JQueryPromise<any>
+    public repositionHere( x: number, y: number ): JQueryPromise<Array<Room>>
     {
         this.herePointer.position = new PIXI.Point( x * ROOM_PIXELS, y * ROOM_PIXELS );
         this.herePointer.visible = true;
@@ -943,6 +936,7 @@ class MumeMapDisplay
         let result = this.mapData.getRoomsAt( coordinates )
             .progress( ( rooms: Array<Room> ) =>
             {
+                console.log( "repositionHere progress, %d rooms", rooms.length );
                 for ( let k = 0; k < rooms.length; ++k )
                 {
                     let room = rooms[k];
