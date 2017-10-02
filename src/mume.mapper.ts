@@ -927,7 +927,7 @@ class MumeMapDisplay
         {
             for ( let j = y - 20; j < y + 20; ++j )
             {
-                let c = new RoomCoords( i, j, -1 );
+                let c = new RoomCoords( i, j, 0 );
                 if ( this.roomDisplays.get( c ) == null )
                     coordinates.push( c );
             }
