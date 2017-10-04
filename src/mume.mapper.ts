@@ -55,41 +55,34 @@ function mapKeys<T, U>( map: Map<T, U> )
     return keys;
 };
 
-/* Poor man's iconv. We know we don't need to handle anything outside of
- * latin1, and the lightest JavaScript iconv lib weights 300kB.
- */
-function translitUnicodeToAscii( unicode: string ): string
+// Adapted from MMapper2: the result must be identical for the hashes to match
+function translitUnicodeToAsciiLikeMMapper( unicode: string ): string
 {
+    const table = [
+        /*192*/ 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'C', 'E', 'E', 'E', 'E', 'I', 'I', 'I', 'I',
+        /*208*/ 'D', 'N', 'O', 'O', 'O', 'O', 'O', 'x', 'O', 'U', 'U', 'U', 'U', 'Y', 'b', 'B',
+        /*224*/ 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'c', 'e', 'e', 'e', 'e', 'i', 'i', 'i', 'i',
+        /*248*/ 'o', 'n', 'o', 'o', 'o', 'o', 'o', ':', 'o', 'u', 'u', 'u', 'u', 'y', 'b', 'y', ];
+
     let ascii = "";
-    for ( let i = 0; i < unicode.length; ++i )
+    for ( let charString of unicode )
     {
-        let ch: string = unicode[i];
-        let tred: string = translitUnicodeToAsciiTable[ch];
-        if ( tred != undefined )
-            ascii += tred;
+        let ch = charString.charCodeAt( 0 );
+        if (ch > 128)
+        {
+          if (ch < 192)
+            ascii += "z"; // sic
+          else
+            ascii += table[ ch - 192 ];
+        }
         else
-            ascii += unicode[i];
-        /* String append is hopefully optimized. Otherwise, String.replace(...,
-         * func) may be faster. Either way, I'm not sure it matters. */
+        {
+            ascii += charString;
+        }
     }
 
     return ascii;
-};
-
-const translitUnicodeToAsciiTable: { [key: string]: string } = {
-                '\xA1': '!',    '\xA2': 'c',  '\xA3': 'L',  '\xA4': 'x',   '\xA5': 'Y',   '\xA6': '|',   '\xA7': 'P',
-   '\xA8': '"', '\xA9': '(C) ', '\xAA': 'a',  '\xAB': '<<', '\xAC': '-',   '\xAD': ' ',   '\xAE': '(R)', '\xAF': '-',
-   '\xB0': '0', '\xB1': '+/-',  '\xB2': '2',  '\xB3': '3',  '\xB4': "'",   '\xB5': 'u',   '\xB6': 'P',   '\xB7': '.',
-   '\xB8': ',', '\xB9': '1',    '\xBA': '0',  '\xBB': '>>', '\xBC': '1/4', '\xBD': '1/2', '\xBE': '3/4', '\xBF': '?',
-   '\xC0': 'A', '\xC1': 'A',    '\xC2': 'A',  '\xC3': 'A',  '\xC4': 'A',   '\xC5': 'A',   '\xC6': 'AE',  '\xC7': 'C',
-   '\xC8': 'E', '\xC9': 'E',    '\xCA': 'Z',  '\xCB': 'E',  '\xCC': 'I',   '\xCD': 'I',   '\xCE': 'I',   '\xCF': 'I',
-   '\xD0': 'D', '\xD1': 'N',    '\xD2': 'O',  '\xD3': 'O',  '\xD4': 'O',   '\xD5': 'O',   '\xD6': 'O',   '\xD7': 'x',
-   '\xD8': 'O', '\xD9': 'U',    '\xDA': 'U',  '\xDB': 'U',  '\xDC': 'U',   '\xDD': 'Y',   '\xDE': 'TH',  '\xDF': 'ss',
-   '\xE0': 'a', '\xE1': 'a',    '\xE2': 'a',  '\xE3': 'a',  '\xE4': 'a',   '\xE5': 'a',   '\xE6': 'ae',  '\xE7': 'c',
-   '\xE8': 'e', '\xE9': 'z',    '\xEA': 'z',  '\xEB': 'e',  '\xEC': 'i',   '\xED': 'i',   '\xEE': 'i',   '\xEF': 'i',
-   '\xF0': 'd', '\xF1': 'n',    '\xF2': 'o',  '\xF3': 'o',  '\xF4': 'o',   '\xF5': 'o',   '\xF6': 'o',   '\xF7': '/',
-   '\xF8': 'o', '\xF9': 'u',    '\xFA': 'u',  '\xFB': 'u',  '\xFC': 'u',   '\xFD': 'y',   '\xFE': 'th',  '\xFF': 'y',
-};
+}
 
 
 /* This is the "entry point" to this library for the rest of the code. */
@@ -212,16 +205,19 @@ class MumeMapIndex
         this.cachedChunks = new Set<string>();
     }
 
-    /* Make sure none of this data contains colour (or other) escapes,
-     * because we indexed on the plain text. Same thing for linebreaks. Also remove
-     * any trailing whitespace, because MMapper seems to do so.
+    /* Normalize into text that should match what MMapper used to produce the
+     * name+desc hashes.
      */
-    public static sanitizeString( text: string )
+    public static normalizeString( input: string )
     {
-        return text
-            .replace( MumeMapIndex.ANY_ANSI_ESCAPE, '' )
-            .replace( /\r\n/g, "\n" )
-            .replace( / +$/gm, "" );
+        // MMapper indexed the plain text without any escape, obviously.
+        let text = input.replace( MumeMapIndex.ANY_ANSI_ESCAPE, '' );
+
+        // MMapper applies these conversions to ensure the hashes in the index
+        // are resilient to trivial changes.
+        return translitUnicodeToAsciiLikeMMapper( text )
+            .replace( / +/g, " " )
+            .replace( / *\r?\n/g, "\n" );
     }
 
     /* Returns a hash of the name+desc that identifies the chunk of the name+desc
@@ -230,16 +226,11 @@ class MumeMapIndex
      */
     public static hashNameDesc( name: string, desc: string )
     {
-        var namedesc, blob, i, hash;
+        let normName = MumeMapIndex.normalizeString( name );
+        let normDesc = MumeMapIndex.normalizeString( desc );
+        let namedesc = normName + "\n" + normDesc;
 
-        name = MumeMapIndex.sanitizeString( name );
-        desc = MumeMapIndex.sanitizeString( desc );
-        namedesc = name + desc;
-
-        // MMapper2 provides pure-ASCII strings only
-        blob = translitUnicodeToAscii( namedesc );
-
-        hash = SparkMD5.hash( blob );
+        let hash = SparkMD5.hash( namedesc );
         return hash;
     }
 
