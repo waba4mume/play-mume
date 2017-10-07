@@ -19,6 +19,16 @@ const SECT_CAVERN         = 14;
 const SECT_DEATHTRAP      = 15;
 const SECT_COUNT          = 16;
 const MAP_DATA_PATH = "mapdata/v1/";
+enum Dir { // Must match MM2's defs.
+    NORTH = 0,
+    SOUTH = 1,
+    EAST = 2,
+    WEST = 3,
+    UP = 4,
+    DOWN = 5,
+    NONE = 6,
+    UNKNOWN = 7,
+};
 
 /* Like JQuery.when(), but the master Promise is resolved only when all
  * promises are resolved or rejected, not at the first rejection. */
@@ -421,20 +431,30 @@ class MapMetaData
     roomsCount: number = 0;
 }
 
-// This is what we load from the server.
+interface RoomId extends Number {
+    _roomIdBrand: string; // Prevent implicit conversion with Number
+}
+
+// This is what we load from the server, inside RoomData.
+class RoomExit
+{
+    name: string = "";
+    dflags: number = 0;
+    flags: number = 0;
+    in: Array<RoomId> = [];
+    out: Array<RoomId> = [];
+}
+
 class RoomData
 {
-    [key: string] : any;
-
-    /* The default values are never used and only make sure we can compare the
-     * declared vs. downloaded properties at runtime. */
     name: string = "";
     desc: string = "";
-    id: number = 0;
+    id: RoomId = 0 as any;
     x: number = 0;
     y: number = 0;
     z: number = 0;
-    exits: Array<any> = [];
+    exits: Array<RoomExit> = [];
+    sector: number = 0;
     // ...
 }
 
@@ -853,16 +873,13 @@ class MumeMapDisplay
         borders.lineStyle( 2, 0x000000, 1 );
 
         [   // direction MD entry, start coords, end coords
-            [ "north", 0, 0, ROOM_PIXELS, 0 ],
-            [ "east",  ROOM_PIXELS, 0, ROOM_PIXELS, ROOM_PIXELS ],
-            [ "south", ROOM_PIXELS, ROOM_PIXELS, 0, ROOM_PIXELS ],
-            [ "west",  0, ROOM_PIXELS, 0, 0 ]
-        ].forEach( function( border: [string, number, number, number, number] )
+            [ Dir.NORTH, 0, 0, ROOM_PIXELS, 0 ],
+            [ Dir.EAST,  ROOM_PIXELS, 0, ROOM_PIXELS, ROOM_PIXELS ],
+            [ Dir.SOUTH, ROOM_PIXELS, ROOM_PIXELS, 0, ROOM_PIXELS ],
+            [ Dir.WEST,  0, ROOM_PIXELS, 0, 0 ]
+        ].forEach( function( border: [Dir, number, number, number, number] )
         {
-            // XXX: room["dir"] syntax may break some Javascript engine
-            // optimizations, test it (with a complete map) and refactor if
-            // needed.
-            if ( typeof room.data[ border[0] ] !== "number" )
+            if ( room.data.exits[ border[0] ].out.length === 0 )
             {
                 borders.moveTo( border[1], border[2] );
                 borders.lineTo( border[3], border[4] );
