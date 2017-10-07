@@ -812,7 +812,7 @@ namespace Mm2Gfx
     }
 
     // Road and trail assets are numbered 0..15 based on bit operations
-    // describing which exits are connected to that road/trail.
+    // describing which exits are roads/trails.
     function roadDirsFlags( room: Room ) : number
     {
         let dirsf: number = 0;
@@ -824,15 +824,33 @@ namespace Mm2Gfx
         return dirsf;
     }
 
-    function buildRoomSector( room: Room ) : PIXI.Sprite
+    function buildRoomSector( room: Room ) : PIXI.DisplayObject
     {
-        let imgPath : string;
+        let display: PIXI.DisplayObject;
+        let sector: PIXI.Sprite;
+        let dirsf = roadDirsFlags( room );
         if ( room.data.sector === Sector.ROAD )
-            imgPath = getRoadAssetPath( roadDirsFlags( room ), "road" );
+        {
+            let imgPath = getRoadAssetPath( dirsf, "road" );
+            display = sector = new PIXI.Sprite( PIXI.loader.resources[ imgPath ].texture );
+        }
         else
-            imgPath = getSectorAssetPath( room.data.sector );
+        {
+            let imgPath = getSectorAssetPath( room.data.sector );
+            sector = new PIXI.Sprite( PIXI.loader.resources[ imgPath ].texture );
 
-        let sector = new PIXI.Sprite( PIXI.loader.resources[ imgPath ].texture );
+            if ( dirsf !== 0 ) // Trail (road exits but not Sectors.ROAD)
+            {
+                let trailPath = getRoadAssetPath( dirsf, "trail" );
+                let trail = new PIXI.Sprite( PIXI.loader.resources[ trailPath ].texture );
+
+                display = new PIXI.Container();
+                sector.addChild( sector, trail );
+            }
+            else
+                display = sector;
+        }
+
         sector.height = sector.width = ROOM_PIXELS; // Just in case we got a wrong PNG here
 
         return sector;
