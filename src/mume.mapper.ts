@@ -2,29 +2,13 @@ namespace Mapper
 {
 
 const ROOM_PIXELS = 48;
-const SECT_UNDEFINED      =  0;
-const SECT_INSIDE         =  1;
-const SECT_CITY           =  2;
-const SECT_FIELD          =  3;
-const SECT_FOREST         =  4;
-const SECT_HILLS          =  5;
-const SECT_MOUNTAIN       =  6;
-const SECT_WATER_SHALLOW  =  7;
-const SECT_WATER          =  8;
-const SECT_WATER_NOBOAT   =  9;
-const SECT_UNDERWATER     = 10;
-const SECT_ROAD           = 11;
-const SECT_BRUSH          = 12;
-const SECT_TUNNEL         = 13;
-const SECT_CAVERN         = 14;
-const SECT_DEATHTRAP      = 15;
-const SECT_COUNT          = 16;
 const MAP_DATA_PATH = "mapdata/v1/";
 enum Dir { // Must match MM2's defs.
     NORTH = 0,
     SOUTH = 1,
     EAST = 2,
     WEST = 3,
+    LAST_GROUND_DIR = WEST,
     UP = 4,
     DOWN = 5,
     NONE = 6,
@@ -773,32 +757,89 @@ class MumeMapData
 // Algorithms that build PIXI display elements.
 namespace Mm2Gfx
 {
+    enum Sector
+    {
+        UNDEFINED      =  0,
+        INSIDE         =  1,
+        CITY           =  2,
+        FIELD          =  3,
+        FOREST         =  4,
+        HILLS          =  5,
+        MOUNTAIN       =  6,
+        WATER_SHALLOW  =  7,
+        WATER          =  8,
+        WATER_NOBOAT   =  9,
+        UNDERWATER     = 10,
+        ROAD           = 11,
+        BRUSH          = 12,
+        TUNNEL         = 13,
+        CAVERN         = 14,
+        DEATHTRAP      = 15,
+        COUNT          = 16,
+    }
+
+    enum ExitFlags
+    {
+        ROAD = ( 1 << 2 ),
+    }
+
+    type RoadKind = "road" | "trail";
+
     function getSectorAssetPath( sector: number ): string
     {
         return "resources/pixmaps/terrain" + sector + ".png";
     }
 
+    function getRoadAssetPath( dirsf: number, kind: RoadKind ): string
+    {
+        return `resources/pixmaps/${kind}${dirsf}.png`;
+    }
+
     export function getAllAssetPaths(): Array<String>
     {
         let paths: Array<String> = [];
-        for ( let i = SECT_UNDEFINED; i < SECT_COUNT; ++i )
+
+        for ( let i = 0; i < Sector.COUNT; ++i )
             paths.push( getSectorAssetPath( i ) );
+
+        for ( let i = 0; i < ( 1 << ( Dir.LAST_GROUND_DIR + 1 ) ); ++i )
+        {
+            paths.push( getRoadAssetPath( i, "road" ) );
+            paths.push( getRoadAssetPath( i, "trail" ) );
+        }
+
         return paths;
     }
 
-    /* Returns the graphical structure for a single room for rendering (base
-     * texture, walls, flags etc). */
-    export function buildRoomDisplay( room: Room ): PIXI.Container
+    // Road and trail assets are numbered 0..15 based on bit operations
+    // describing which exits are connected to that road/trail.
+    function roadDirsFlags( room: Room ) : number
     {
-        let display = new PIXI.Container();
+        let dirsf: number = 0;
 
-        // load a PNG as background (sector type)
-        let imgPath = getSectorAssetPath( room.data.sector );
+        for ( let dir = 0; dir <= Dir.LAST_GROUND_DIR; ++dir )
+            if ( room.data.exits[ dir ].flags & ExitFlags.ROAD )
+                dirsf |= ( 1 << dir );
+
+        return dirsf;
+    }
+
+    function buildRoomSector( room: Room ) : PIXI.Sprite
+    {
+        let imgPath : string;
+        if ( room.data.sector === Sector.ROAD )
+            imgPath = getRoadAssetPath( roadDirsFlags( room ), "road" );
+        else
+            imgPath = getSectorAssetPath( room.data.sector );
+
         let sector = new PIXI.Sprite( PIXI.loader.resources[ imgPath ].texture );
         sector.height = sector.width = ROOM_PIXELS; // Just in case we got a wrong PNG here
-        display.addChild( sector );
 
-        // Draw the borders
+        return sector;
+    }
+
+    function buildRoomBorders( room: Room ) : PIXI.Graphics
+    {
         let borders = new PIXI.Graphics();
         borders.lineStyle( 2, 0x000000, 1 );
 
@@ -815,7 +856,18 @@ namespace Mm2Gfx
                 borders.lineTo( border[3], border[4] );
             }
         } );
-        display.addChild( borders );
+
+        return borders;
+    }
+
+    /* Returns the graphical structure for a single room for rendering (base
+     * texture, walls, flags etc). */
+    export function buildRoomDisplay( room: Room ): PIXI.Container
+    {
+        let display = new PIXI.Container();
+
+        display.addChild( buildRoomSector( room ) );
+        display.addChild( buildRoomBorders( room ) );
 
         // Position the room display in its layer
         display.position = new PIXI.Point( room.data.x * ROOM_PIXELS, room.data.y * ROOM_PIXELS );
