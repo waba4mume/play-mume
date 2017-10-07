@@ -770,6 +770,83 @@ class MumeMapData
 
 
 
+// Algorithms that build PIXI display elements.
+namespace Mm2Gfx
+{
+    function getSectorAssetPath( sector: number ): string
+    {
+        return "resources/pixmaps/terrain" + sector + ".png";
+    }
+
+    export function getAllAssetPaths(): Array<String>
+    {
+        let paths: Array<String> = [];
+        for ( let i = SECT_UNDEFINED; i < SECT_COUNT; ++i )
+            paths.push( getSectorAssetPath( i ) );
+        return paths;
+    }
+
+    /* Returns the graphical structure for a single room for rendering (base
+     * texture, walls, flags etc). */
+    export function buildRoomDisplay( room: Room ): PIXI.Container
+    {
+        let display = new PIXI.Container();
+
+        // load a PNG as background (sector type)
+        let imgPath = getSectorAssetPath( room.data.sector );
+        let sector = new PIXI.Sprite( PIXI.loader.resources[ imgPath ].texture );
+        sector.height = sector.width = ROOM_PIXELS; // Just in case we got a wrong PNG here
+        display.addChild( sector );
+
+        // Draw the borders
+        let borders = new PIXI.Graphics();
+        borders.lineStyle( 2, 0x000000, 1 );
+
+        [   // direction MD entry, start coords, end coords
+            [ Dir.NORTH, 0, 0, ROOM_PIXELS, 0 ],
+            [ Dir.EAST,  ROOM_PIXELS, 0, ROOM_PIXELS, ROOM_PIXELS ],
+            [ Dir.SOUTH, ROOM_PIXELS, ROOM_PIXELS, 0, ROOM_PIXELS ],
+            [ Dir.WEST,  0, ROOM_PIXELS, 0, 0 ]
+        ].forEach( function( border: [Dir, number, number, number, number] )
+        {
+            if ( room.data.exits[ border[0] ].out.length === 0 )
+            {
+                borders.moveTo( border[1], border[2] );
+                borders.lineTo( border[3], border[4] );
+            }
+        } );
+        display.addChild( borders );
+
+        // Position the room display in its layer
+        display.position = new PIXI.Point( room.data.x * ROOM_PIXELS, room.data.y * ROOM_PIXELS );
+        /*console.log( "MumeMapDisplay added room %s (%d,%d) in PIXI at local:%O, global:%O",
+            room.data.name, room.data.x, room.data.y, display.position, display.getGlobalPosition() );*/
+
+        display.cacheAsBitmap = true;
+        return display;
+    }
+
+    /* Returns the graphical structure for the yellow square that shows the current
+     * position to the player. */
+    export function buildHerePointer(): PIXI.Graphics
+    {
+        var square, size, offset;
+
+        size = ROOM_PIXELS * 1.4;
+        offset = ( size - ROOM_PIXELS ) / 2;
+
+        square = new PIXI.Graphics();
+        square.lineStyle( 2, 0xFFFF00, 1 );
+        square.drawRect( -offset, -offset, size, size );
+
+        square.beginFill( 0x000000, 0.1 );
+        square.drawRect( -offset, -offset, size, size );
+        square.endFill();
+
+        return square;
+    }
+}
+
 
 
 /* Renders mapData into a DOM placeholder identified by containerElementName.
@@ -811,7 +888,7 @@ class MumeMapDisplay
         this.renderer.view.id = this.containerElementName;
 
         // Start loading assets
-        PIXI.loader.add( MumeMapDisplay.getAllAssetPaths() );
+        PIXI.loader.add( Mm2Gfx.getAllAssetPaths() );
         PIXI.loader.load( this.buildMapDisplay.bind( this ) );
 
         return;
@@ -833,7 +910,7 @@ class MumeMapDisplay
         map.addChild( this.layer0 );
 
         // Add the current room yellow square
-        this.herePointer = MumeMapDisplay.buildHerePointer();
+        this.herePointer = Mm2Gfx.buildHerePointer();
         this.herePointer.visible = false;
         map.addChild( this.herePointer );
 
@@ -842,79 +919,6 @@ class MumeMapDisplay
         this.refresh();
 
         return;
-    };
-
-    private static getSectorAssetPath( sector: number ): string
-    {
-        return "resources/pixmaps/terrain" + sector + ".png";
-    };
-
-    private static getAllAssetPaths(): Array<String>
-    {
-        let paths: Array<String> = [];
-        for ( let i = SECT_UNDEFINED; i < SECT_COUNT; ++i )
-            paths.push( MumeMapDisplay.getSectorAssetPath( i ) );
-        return paths;
-    };
-
-    /* Returns the graphical structure for a single room for rendering (base
-     * texture, walls, flags etc). */
-    private static buildRoomDisplay( room: Room ): PIXI.Container
-    {
-        let display = new PIXI.Container();
-
-        // load a PNG as background (sector type)
-        let imgPath = MumeMapDisplay.getSectorAssetPath( room.data.sector );
-        let sector = new PIXI.Sprite( PIXI.loader.resources[ imgPath ].texture );
-        sector.height = sector.width = ROOM_PIXELS; // Just in case we got a wrong PNG here
-        display.addChild( sector );
-
-        // Draw the borders
-        let borders = new PIXI.Graphics();
-        borders.lineStyle( 2, 0x000000, 1 );
-
-        [   // direction MD entry, start coords, end coords
-            [ Dir.NORTH, 0, 0, ROOM_PIXELS, 0 ],
-            [ Dir.EAST,  ROOM_PIXELS, 0, ROOM_PIXELS, ROOM_PIXELS ],
-            [ Dir.SOUTH, ROOM_PIXELS, ROOM_PIXELS, 0, ROOM_PIXELS ],
-            [ Dir.WEST,  0, ROOM_PIXELS, 0, 0 ]
-        ].forEach( function( border: [Dir, number, number, number, number] )
-        {
-            if ( room.data.exits[ border[0] ].out.length === 0 )
-            {
-                borders.moveTo( border[1], border[2] );
-                borders.lineTo( border[3], border[4] );
-            }
-        } );
-        display.addChild( borders );
-
-        // Position the room display in its layer
-        display.position = new PIXI.Point( room.data.x * ROOM_PIXELS, room.data.y * ROOM_PIXELS );
-        /*console.log( "MumeMapDisplay added room %s (%d,%d) in PIXI at local:%O, global:%O",
-            room.data.name, room.data.x, room.data.y, display.position, display.getGlobalPosition() );*/
-
-        display.cacheAsBitmap = true;
-        return display;
-    };
-
-    /* Returns the graphical structure for the yellow square that shows the current
-     * position to the player. */
-    public static buildHerePointer(): PIXI.Graphics
-    {
-        var square, size, offset;
-
-        size = ROOM_PIXELS * 1.4;
-        offset = ( size - ROOM_PIXELS ) / 2;
-
-        square = new PIXI.Graphics();
-        square.lineStyle( 2, 0xFFFF00, 1 );
-        square.drawRect( -offset, -offset, size, size );
-
-        square.beginFill( 0x000000, 0.1 );
-        square.drawRect( -offset, -offset, size, size );
-        square.endFill();
-
-        return square;
     };
 
     /* Repositions the HerePointer (yellow square), centers the view, and fetches
@@ -949,7 +953,7 @@ class MumeMapDisplay
                 for ( let k = 0; k < rooms.length; ++k )
                 {
                     let room = rooms[k];
-                    let display = MumeMapDisplay.buildRoomDisplay( room );
+                    let display = Mm2Gfx.buildRoomDisplay( room );
                     if ( this.roomDisplays.get( room.coords() ) == null )
                     {
                         this.roomDisplays.set( room.coords(), display );
