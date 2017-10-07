@@ -1,4 +1,5 @@
-(function( global ) {
+namespace Mapper
+{
 
 const ROOM_PIXELS = 48;
 const SECT_UNDEFINED      =  0;
@@ -96,7 +97,7 @@ function translitUnicodeToAsciiLikeMMapper( unicode: string ): string
 
 
 /* This is the "entry point" to this library for the rest of the code. */
-class MumeMap
+export class MumeMap
 {
     public mapData: MumeMapData;
     public mapIndex: MumeMapIndex;
@@ -1016,7 +1017,7 @@ interface MumeXmlParserTag
  * One registers to events by calling:
  * parser.on( MumeXmlParser.SIG_TAG_END, function( tag ) { /* Use tag.name etc here *./ } );
  */
-class MumeXmlParser
+export class MumeXmlParser
 {
     private tagStack: Array<MumeXmlParserTag>;
     private plainText: string;
@@ -1195,7 +1196,4 @@ class MumeXmlParser
     };
 }
 
-global.MumeMap       = MumeMap;
-global.MumeXmlParser = MumeXmlParser;
-
-})( this );
+} // ns

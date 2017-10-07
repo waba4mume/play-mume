@@ -42,7 +42,7 @@ function open_mume_map_window()
         var parser, map;
 
         parser = DecafMUD.instances[0].textInputFilter;
-        if ( !( parser instanceof MumeXmlParser ) )
+        if ( !( parser instanceof Mapper.MumeXmlParser ) )
         {
             throw "Bug: expected to find a MumeXmlParser installed as "
                 +"DecafMUD input text filter, found: " + typeof parser + " "
@@ -51,7 +51,7 @@ function open_mume_map_window()
         }
 
         map = mapWindow.globalMap;
-        $(parser).on( MumeXmlParser.SIG_TAG_END, map.processTag.bind( map ) );
+        $(parser).on( Mapper.MumeXmlParser.SIG_TAG_END, map.processTag.bind( map ) );
 
         console.log( "The main window will now send data to the map window" );
     } );
