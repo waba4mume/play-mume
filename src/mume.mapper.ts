@@ -440,6 +440,8 @@ class RoomData
     z: number = 0;
     exits: Array<RoomExit> = [];
     sector: number = 0;
+    loadflags: number = 0;
+    mobflags: number = 0;
     // ...
 }
 
@@ -784,6 +786,10 @@ namespace Mm2Gfx
     }
 
     type RoadKind = "road" | "trail";
+    type ExtraKind = "mob" | "load";
+
+    const MOB_FLAGS = 15;
+    const LOAD_FLAGS = 16;
 
     function getSectorAssetPath( sector: number ): string
     {
@@ -793,6 +799,11 @@ namespace Mm2Gfx
     function getRoadAssetPath( dirsf: number, kind: RoadKind ): string
     {
         return `resources/pixmaps/${kind}${dirsf}.png`;
+    }
+
+    function getExtraAssetPath( extra: number, kind: ExtraKind ): string
+    {
+        return `resources/pixmaps/${kind}${extra}.png`;
     }
 
     export function getAllAssetPaths(): Array<String>
@@ -807,6 +818,11 @@ namespace Mm2Gfx
             paths.push( getRoadAssetPath( i, "road" ) );
             paths.push( getRoadAssetPath( i, "trail" ) );
         }
+
+        for ( let i = 0; i < MOB_FLAGS; ++i )
+            paths.push( getExtraAssetPath( i, "mob" ) );
+        for ( let i = 0; i < LOAD_FLAGS; ++i )
+            paths.push( getExtraAssetPath( i, "load" ) );
 
         return paths;
     }
@@ -878,6 +894,35 @@ namespace Mm2Gfx
         return borders;
     }
 
+    function buildRoomExtra( room: Room, kind: ExtraKind ) : PIXI.DisplayObject | null
+    {
+        const flagsCount = (kind === "load" ? LOAD_FLAGS : MOB_FLAGS );
+        const flags = (kind === "load" ? room.data.loadflags : room.data.mobflags );
+
+        let paths: Array<string> = [];
+        for ( let i = 0; i < flagsCount; ++i )
+            if ( flags & ( 1 << i ) )
+                paths.push( getExtraAssetPath( i, kind ) );
+
+        if ( paths.length === 0 )
+            return null;
+
+        // Do not allocate a container for the common case of a single load flag
+        if ( paths.length === 1 )
+            return new PIXI.Sprite( PIXI.loader.resources[ paths[0] ].texture );
+
+        let display = new PIXI.Container();
+        for ( let path of paths )
+            display.addChild( new PIXI.Sprite( PIXI.loader.resources[ path ].texture ) );
+        return display;
+    }
+
+    function maybeAddChild( display: PIXI.Container, child: PIXI.DisplayObject | null ): void
+    {
+        if ( child != null )
+            display.addChild( child );
+    }
+
     /* Returns the graphical structure for a single room for rendering (base
      * texture, walls, flags etc). */
     export function buildRoomDisplay( room: Room ): PIXI.Container
@@ -886,6 +931,8 @@ namespace Mm2Gfx
 
         display.addChild( buildRoomSector( room ) );
         display.addChild( buildRoomBorders( room ) );
+        maybeAddChild( display, buildRoomExtra( room, "mob" ) );
+        maybeAddChild( display, buildRoomExtra( room, "load" ) );
 
         // Position the room display in its layer
         display.position = new PIXI.Point( room.data.x * ROOM_PIXELS, room.data.y * ROOM_PIXELS );
