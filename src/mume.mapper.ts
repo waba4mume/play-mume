@@ -977,7 +977,7 @@ class MumeMapDisplay
     // PIXI elements
     private herePointer: PIXI.Container;
     private stage: PIXI.Container;
-    private layer0: PIXI.Container;
+    private layers: Array<PIXI.Container> = [];
     private renderer: PIXI.SystemRenderer;
 
     constructor( containerElementName: string, mapData: MumeMapData )
@@ -1022,9 +1022,13 @@ class MumeMapDisplay
         // moving the viewport
         map = new PIXI.Container();
 
-        // Add the rooms to a base layer (later we'll need more layers)
-        this.layer0 = new PIXI.Container();
-        map.addChild( this.layer0 );
+        // Rooms live on layers, there is one layer per z coord
+        for ( let i = 0; i < this.mapData.metaData.maxZ - this.mapData.metaData.minZ; ++i )
+        {
+            let layer = new PIXI.Container();
+            this.layers.push( layer );
+            map.addChild( layer );
+        }
 
         // Add the current room yellow square
         this.herePointer = Mm2Gfx.buildHerePointer();
@@ -1037,6 +1041,12 @@ class MumeMapDisplay
 
         return;
     };
+
+    private layerForCoords( coords: RoomCoords ): PIXI.Container
+    {
+        let zeroedZ = coords.z - this.mapData.metaData.minZ;
+        return this.layers[zeroedZ];
+    }
 
     /* Repositions the HerePointer (yellow square), centers the view, and fetches
      * nearby rooms for Pixi. Does not refresh the view.
@@ -1057,9 +1067,13 @@ class MumeMapDisplay
         {
             for ( let j = y - 20; j < y + 20; ++j )
             {
-                let c = new RoomCoords( i, j, 0 );
-                if ( this.roomDisplays.get( c ) == null )
-                    coordinates.push( c );
+                for ( let k = this.mapData.metaData.minZ; k <= this.mapData.metaData.maxZ; ++k )
+                {
+                    let c = new RoomCoords( i, j, k );
+                    if ( this.roomDisplays.get( c ) == null )
+                        coordinates.push( c );
+                    // Yes, this tight loop is probably horrible for memory & CPU
+                }
             }
         }
 
@@ -1070,11 +1084,12 @@ class MumeMapDisplay
                 for ( let k = 0; k < rooms.length; ++k )
                 {
                     let room = rooms[k];
+                    let c = room.coords();
                     let display = Mm2Gfx.buildRoomDisplay( room );
-                    if ( this.roomDisplays.get( room.coords() ) == null )
+                    if ( this.roomDisplays.get( c ) == null )
                     {
-                        this.roomDisplays.set( room.coords(), display );
-                        this.layer0.addChild( display );
+                        this.roomDisplays.set( c, display );
+                        this.layerForCoords( c ).addChild( display );
                     }
                 }
             } );
