@@ -974,14 +974,12 @@ namespace Mm2Gfx
 
     /* Returns the graphical structure for the yellow square that shows the current
      * position to the player. */
-    export function buildHerePointer(): PIXI.Graphics
+    export function buildHerePointer(): PIXI.DisplayObject
     {
-        var square, size, offset;
+        const size = ROOM_PIXELS * 1.4;
+        const offset = ( size - ROOM_PIXELS ) / 2;
 
-        size = ROOM_PIXELS * 1.4;
-        offset = ( size - ROOM_PIXELS ) / 2;
-
-        square = new PIXI.Graphics();
+        let square = new PIXI.Graphics();
         square.lineStyle( 2, 0xFFFF00, 1 );
         square.drawRect( -offset, -offset, size, size );
 
@@ -993,8 +991,6 @@ namespace Mm2Gfx
     }
 }
 
-
-
 /* Renders mapData into a DOM placeholder identified by containerElementName.
  */
 class MumeMapDisplay
@@ -1004,10 +1000,9 @@ class MumeMapDisplay
     private roomDisplays: SpatialIndex<PIXI.Container>;
 
     // PIXI elements
-    private herePointer: PIXI.Container;
+    private herePointer: PIXI.DisplayObject;
     private stage: PIXI.Container;
     private layers: Array<PIXI.Container> = [];
-    private activeLayer: PIXI.Container | null = null;
     private renderer: PIXI.SystemRenderer;
 
     constructor( containerElementName: string, mapData: MumeMapData )
@@ -1072,9 +1067,19 @@ class MumeMapDisplay
         return;
     };
 
+    private roomCoordsToPoint( where: RoomCoords): PIXI.Point
+    {
+        return new PIXI.Point( where.x * ROOM_PIXELS, where.y * ROOM_PIXELS );
+    }
+
+    private zeroZ( z: number ): number
+    {
+        return z - this.mapData.metaData.minZ;
+    }
+
     private layerForCoords( coords: RoomCoords ): PIXI.Container
     {
-        let zeroedZ = coords.z - this.mapData.metaData.minZ;
+        let zeroedZ = this.zeroZ( coords.z );
         return this.layers[zeroedZ];
     }
 
@@ -1098,21 +1103,61 @@ class MumeMapDisplay
         return coordinates;
     }
 
-    private setActiveLayer( where: RoomCoords ): void
+    /* We want a perspective effect between the layers to emulate 3D rendering.
+     * For that purpose, we need to set the pivot of each layer to the current
+     * position so that the upper/lower layers are scaled up/down like
+     * perspective would.
+     *
+     * However, PIXI's pivot is actually the anchor point for position, too, so
+     * under the hood we shift the layers around. It doesn't affect the rest of
+     * the code because it is hidden inside the map/stage abstraction.
+     */
+    private repositionLayers( where: RoomCoords ): void
     {
-        let activeLayer = this.layerForCoords( where );
-        if ( this.activeLayer === activeLayer )
-            return;
-
-        for ( let layer of this.layers )
+        let z = this.zeroZ( where.z );
+        for ( let i = 0; i < this.layers.length; ++i )
         {
-            if ( layer === activeLayer )
-                layer.visible = true;
-            else
-                layer.visible = false;
-        }
+            let layer = this.layers[i];
 
-        this.activeLayer = activeLayer;
+            let localPx = this.roomCoordsToPoint( where );
+            localPx.x += ROOM_PIXELS / 2;
+            localPx.y += ROOM_PIXELS / 2;
+
+            layer.visible = false;
+            layer.scale.set( 1, 1 ); // pivot is affected by scale!
+            layer.pivot = layer.position = localPx;
+            layer.alpha = 1;
+            layer.filters = [];
+
+            if ( i === z - 1 ) // Shrink and darken the lower layer
+            {
+                layer.visible = true;
+                layer.scale.set( 0.8, 0.8 );
+                if ( this.renderer.type === PIXI.RENDERER_TYPE.WEBGL )
+                {
+                    let filter = new PIXI.filters.ColorMatrixFilter();
+                    filter.brightness( 0.4, false );
+                    layer.filters = [ filter ];
+                }
+                else
+                {
+                    layer.alpha = 0.6;
+                }
+            }
+            else if ( i === z )
+            {
+                layer.visible = true;
+            }
+            else if ( i === z + 1 ) // Enlarge and brighten the upper layer
+            {
+                layer.visible = true;
+                layer.scale.set( 1.2, 1.2 );
+                layer.alpha = 0.1;
+            }
+
+            /*console.log("layer[%d].position == %d,%d%s", i, layer.position.x, layer.position.y,
+                ( i === z ? " (active)" : "" ) );*/
+        }
     }
 
     /* Repositions the HerePointer (yellow square), centers the view, and fetches
@@ -1123,13 +1168,15 @@ class MumeMapDisplay
         this.herePointer.position = new PIXI.Point( where.x * ROOM_PIXELS, where.y * ROOM_PIXELS );
         this.herePointer.visible = true;
 
+        this.repositionLayers( where );
+
         // Scroll to make the herePointer visible
         let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
         this.stage.x += - pointerGlobalPos.x + 400;
         this.stage.y += - pointerGlobalPos.y + 300;
-        console.log( "Recentering view to (r) %O, (px) %d,%d", where, this.stage.x, this.stage.y );
-
-        this.setActiveLayer( where );
+        console.log( "Recentering view to (r) %O", where );
+        /*console.log( "herePointer.position=%O, stage.position=%O",
+            this.herePointer.position, this.stage.position );*/
 
         let coordinates: Array<RoomCoords> = this.roomCoordsNear( where );
         let result = this.mapData.getRoomsAt( coordinates )
