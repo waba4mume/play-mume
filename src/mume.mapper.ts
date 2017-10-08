@@ -111,9 +111,9 @@ export class MumeMap
         } );
     }
 
-    public onMovement( event: any, x: number, y: number ): void
+    public onMovement( event: any, where: RoomCoords ): void
     {
-        this.display.repositionHere( x, y ).done( () =>
+        this.display.repositionHere( where ).done( () =>
         {
             console.log("refreshing the display");
             this.display.refresh();
@@ -173,9 +173,9 @@ class MumePathMachine
     private enterRoom( name: string, desc: string ): void
     {
         this.mapIndex.findPosByNameDesc( name, desc )
-            .done( ( coordinates: Array<RoomCoords2D> ) =>
+            .done( ( coordinates: Array<RoomCoords> ) =>
             {
-                $(this).triggerHandler( MumePathMachine.SIG_MOVEMENT, coordinates[0] );
+                $(this).triggerHandler( MumePathMachine.SIG_MOVEMENT, [ coordinates[0] ] );
             } );
     }
 }
@@ -191,12 +191,12 @@ class MumeMapIndex
     // This is a vast simplification of course...
     private static readonly ANY_ANSI_ESCAPE =  /\x1B\[[^A-Za-z]+[A-Za-z]/g;
 
-    private cache: Map<string, Array<RoomCoords2D>>;
+    private cache: Map<string, Array<RoomCoords>>;
     private cachedChunks: Set<string>;
 
     constructor()
     {
-        this.cache = new Map<string, Array<RoomCoords2D>>();
+        this.cache = new Map<string, Array<RoomCoords>>();
         this.cachedChunks = new Set<string>();
     }
 
@@ -251,7 +251,7 @@ class MumeMapIndex
 
     // Private helper for findPosByNameDesc().
     private findPosByNameDescCached( name: string, desc: string,
-        result: JQueryDeferred<Array<RoomCoords2D>>, hash: string ): JQueryDeferred<Array<RoomCoords2D>>
+        result: JQueryDeferred<Array<RoomCoords>>, hash: string ): JQueryDeferred<Array<RoomCoords>>
     {
         var coordinates, roomInfo;
 
@@ -274,7 +274,7 @@ class MumeMapIndex
     /* This may be asynchronous if the index chunk has not been downloaded yet, so
      * the result is a jQuery Deferred.
      */
-    public findPosByNameDesc( name: string, desc: string ): JQueryDeferred<Array<RoomCoords2D>>
+    public findPosByNameDesc( name: string, desc: string ): JQueryDeferred<Array<RoomCoords>>
     {
         let hash = MumeMapIndex.hashNameDesc( name, desc );
         let result = jQuery.Deferred();
@@ -321,28 +321,19 @@ class ZeroedRoomCoords
     }
 }
 
-class RoomCoords2D
+/* Room coordinates, comprised in metaData.minX .. maxX etc. */
+class RoomCoords
 {
     private preventDuckTyping: any;
 
     public x: number;
     public y: number;
-
-    constructor( x: number, y: number )
-    {
-        this.x = x;
-        this.y = y;
-    }
-}
-
-/* Room coordinates, comprised in metaData.minX .. maxX etc. */
-class RoomCoords extends RoomCoords2D
-{
     public z: number;
 
     constructor( x: number, y: number, z: number )
     {
-        super( x, y );
+        this.x = x;
+        this.y = y;
         this.z = z;
     }
 
@@ -1062,21 +1053,21 @@ class MumeMapDisplay
     /* Repositions the HerePointer (yellow square), centers the view, and fetches
      * nearby rooms for Pixi. Does not refresh the view.
      */
-    public repositionHere( x: number, y: number ): JQueryPromise<Array<Room>>
+    public repositionHere( where: RoomCoords ): JQueryPromise<Array<Room>>
     {
-        this.herePointer.position = new PIXI.Point( x * ROOM_PIXELS, y * ROOM_PIXELS );
+        this.herePointer.position = new PIXI.Point( where.x * ROOM_PIXELS, where.y * ROOM_PIXELS );
         this.herePointer.visible = true;
 
         // Scroll to make the herePointer visible
         let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
         this.stage.x += - pointerGlobalPos.x + 400;
         this.stage.y += - pointerGlobalPos.y + 300;
-        console.log( "Recentering view to (r) %d,%d, (px) %d,%d", x, y, this.stage.x, this.stage.y );
+        console.log( "Recentering view to (r) %O, (px) %d,%d", where, this.stage.x, this.stage.y );
 
         let coordinates: Array<RoomCoords> = [];
-        for ( let i = x - 20; i < x + 20; ++i )
+        for ( let i = where.x - 20; i < where.x + 20; ++i )
         {
-            for ( let j = y - 20; j < y + 20; ++j )
+            for ( let j = where.y - 20; j < where.y + 20; ++j )
             {
                 for ( let k = this.mapData.metaData.minZ; k <= this.mapData.metaData.maxZ; ++k )
                 {
