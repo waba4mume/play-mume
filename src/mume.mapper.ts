@@ -173,7 +173,7 @@ class MumePathMachine
     private enterRoom( name: string, desc: string ): void
     {
         this.mapIndex.findPosByNameDesc( name, desc )
-            .done( ( coordinates: any ) =>
+            .done( ( coordinates: Array<RoomCoords2D> ) =>
             {
                 $(this).triggerHandler( MumePathMachine.SIG_MOVEMENT, coordinates[0] );
             } );
@@ -191,12 +191,12 @@ class MumeMapIndex
     // This is a vast simplification of course...
     private static readonly ANY_ANSI_ESCAPE =  /\x1B\[[^A-Za-z]+[A-Za-z]/g;
 
-    private cache: Map<string, any>;
+    private cache: Map<string, Array<RoomCoords2D>>;
     private cachedChunks: Set<string>;
 
     constructor()
     {
-        this.cache = new Map<string, any>();
+        this.cache = new Map<string, Array<RoomCoords2D>>();
         this.cachedChunks = new Set<string>();
     }
 
@@ -250,7 +250,8 @@ class MumeMapIndex
     }
 
     // Private helper for findPosByNameDesc().
-    private findPosByNameDescCached( name: string, desc: string, result: any, hash: any )
+    private findPosByNameDescCached( name: string, desc: string,
+        result: JQueryDeferred<Array<RoomCoords2D>>, hash: string ): JQueryDeferred<Array<RoomCoords2D>>
     {
         var coordinates, roomInfo;
 
@@ -266,13 +267,14 @@ class MumeMapIndex
             console.log( "MumeMapIndex: found %s (%O) in %O", name, roomInfo, coordinates );
             result.resolve( coordinates );
         }
+
         return result;
     }
 
     /* This may be asynchronous if the index chunk has not been downloaded yet, so
      * the result is a jQuery Deferred.
      */
-    public findPosByNameDesc( name: string, desc: string ): any
+    public findPosByNameDesc( name: string, desc: string ): JQueryDeferred<Array<RoomCoords2D>>
     {
         let hash = MumeMapIndex.hashNameDesc( name, desc );
         let result = jQuery.Deferred();
@@ -319,19 +321,28 @@ class ZeroedRoomCoords
     }
 }
 
-/* Room coordinates, comprised in metaData.minX .. maxX etc. */
-class RoomCoords
+class RoomCoords2D
 {
     private preventDuckTyping: any;
 
     public x: number;
     public y: number;
+
+    constructor( x: number, y: number )
+    {
+        this.x = x;
+        this.y = y;
+    }
+}
+
+/* Room coordinates, comprised in metaData.minX .. maxX etc. */
+class RoomCoords extends RoomCoords2D
+{
     public z: number;
 
     constructor( x: number, y: number, z: number )
     {
-        this.x = x;
-        this.y = y;
+        super( x, y );
         this.z = z;
     }
 
