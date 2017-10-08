@@ -667,7 +667,7 @@ class MumeMapData
         let result = jQuery.Deferred();
         let downloads: Array<{ zone: string, dfr: JQueryXHR }> = [];
         let downloadDeferreds: Array<JQueryXHR> = [];
-        let zonesNotInCache = new Map<string, Set<RoomCoords>>();
+        let roomsNotInCachePerZone = new Map<string, Set<RoomCoords>>();
         let roomsInCache: Array<Room> = [];
         let roomsDownloaded: Array<Room> = [];
 
@@ -684,14 +684,14 @@ class MumeMapData
             }
             else if ( !this.cachedZones.has( zone ) )
             {
-                let zoneCoords = zonesNotInCache.get( zone );
-                if ( zoneCoords )
-                    zoneCoords.add( coords );
+                let roomsNotInCache = roomsNotInCachePerZone.get( zone );
+                if ( roomsNotInCache )
+                    roomsNotInCache.add( coords );
                 else
                 {
-                    zoneCoords = new Set<RoomCoords>();
-                    zoneCoords.add( coords );
-                    zonesNotInCache.set( zone, zoneCoords );
+                    roomsNotInCache = new Set<RoomCoords>();
+                    roomsNotInCache.add( coords );
+                    roomsNotInCachePerZone.set( zone, roomsNotInCache );
 
                     console.log( "Downloading map zone %s for room %d,%d", zone, coords.x, coords.y );
                     const url = MAP_DATA_PATH + "zone/" + zone + ".json";
@@ -718,7 +718,7 @@ class MumeMapData
                 .done( ( json: any ) =>
                 {
                     console.log( "Zone %s downloaded", download.zone );
-                    let neededCoords = zonesNotInCache.get( download.zone );
+                    let neededCoords = roomsNotInCachePerZone.get( download.zone );
                     if ( neededCoords == undefined )
                         return console.error( "Bug: inconsistent download list" );
 
