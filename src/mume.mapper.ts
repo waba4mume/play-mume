@@ -1007,6 +1007,7 @@ class MumeMapDisplay
     private herePointer: PIXI.Container;
     private stage: PIXI.Container;
     private layers: Array<PIXI.Container> = [];
+    private activeLayer: PIXI.Container | null = null;
     private renderer: PIXI.SystemRenderer;
 
     constructor( containerElementName: string, mapData: MumeMapData )
@@ -1077,20 +1078,8 @@ class MumeMapDisplay
         return this.layers[zeroedZ];
     }
 
-    /* Repositions the HerePointer (yellow square), centers the view, and fetches
-     * nearby rooms for Pixi. Does not refresh the view.
-     */
-    public repositionHere( where: RoomCoords ): JQueryPromise<Array<Room>>
+    private roomCoordsNear( where: RoomCoords ): Array<RoomCoords>
     {
-        this.herePointer.position = new PIXI.Point( where.x * ROOM_PIXELS, where.y * ROOM_PIXELS );
-        this.herePointer.visible = true;
-
-        // Scroll to make the herePointer visible
-        let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
-        this.stage.x += - pointerGlobalPos.x + 400;
-        this.stage.y += - pointerGlobalPos.y + 300;
-        console.log( "Recentering view to (r) %O, (px) %d,%d", where, this.stage.x, this.stage.y );
-
         let coordinates: Array<RoomCoords> = [];
         for ( let i = where.x - 20; i < where.x + 20; ++i )
         {
@@ -1106,6 +1095,43 @@ class MumeMapDisplay
             }
         }
 
+        return coordinates;
+    }
+
+    private setActiveLayer( where: RoomCoords ): void
+    {
+        let activeLayer = this.layerForCoords( where );
+        if ( this.activeLayer === activeLayer )
+            return;
+
+        for ( let layer of this.layers )
+        {
+            if ( layer === activeLayer )
+                layer.visible = true;
+            else
+                layer.visible = false;
+        }
+
+        this.activeLayer = activeLayer;
+    }
+
+    /* Repositions the HerePointer (yellow square), centers the view, and fetches
+     * nearby rooms for Pixi. Does not refresh the view.
+     */
+    public repositionHere( where: RoomCoords ): JQueryPromise<Array<Room>>
+    {
+        this.herePointer.position = new PIXI.Point( where.x * ROOM_PIXELS, where.y * ROOM_PIXELS );
+        this.herePointer.visible = true;
+
+        // Scroll to make the herePointer visible
+        let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
+        this.stage.x += - pointerGlobalPos.x + 400;
+        this.stage.y += - pointerGlobalPos.y + 300;
+        console.log( "Recentering view to (r) %O, (px) %d,%d", where, this.stage.x, this.stage.y );
+
+        this.setActiveLayer( where );
+
+        let coordinates: Array<RoomCoords> = this.roomCoordsNear( where );
         let result = this.mapData.getRoomsAt( coordinates )
             .progress( ( rooms: Array<Room> ) =>
             {
