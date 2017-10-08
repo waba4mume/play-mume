@@ -232,18 +232,45 @@ class MumeMapIndex
     private updateCache( json: any )
     {
         var hash, oldSize, sizeIncrease, jsonSize;
+        let invalid = 0;
 
         oldSize = this.cache.size;
 
         for ( hash in json )
+        {
             if ( json.hasOwnProperty( hash ) )
-                this.cache.set( hash, json[ hash ] );
+            {
+                let rawCoordsArray: Array<Array<number>> = json[ hash ];
+                if ( !Array.isArray( rawCoordsArray ) )
+                {
+                    ++invalid;
+                    continue;
+                }
+
+                let coordsArray: Array<RoomCoords> | null = [];
+                for ( let rawCoords of rawCoordsArray )
+                {
+                    if ( !Array.isArray( rawCoords ) || rawCoords.length !== 3 )
+                    {
+                        coordsArray = null;
+                        break;
+                    }
+                    else
+                        coordsArray.push( new RoomCoords( rawCoords[0], rawCoords[1], rawCoords[2] ) );
+                }
+
+                if ( coordsArray === null )
+                    ++invalid;
+                else
+                    this.cache.set( hash, coordsArray );
+            }
+        }
 
         sizeIncrease = this.cache.size - oldSize;
         jsonSize = Object.keys( json ).length;
 
-        console.log( "MumeMapIndex: cached %d new entries (%d total)",
-            sizeIncrease, this.cache.size, jsonSize );
+        console.log( "MumeMapIndex: cached %d new entries (%d total), ignored %d invalid",
+            sizeIncrease, this.cache.size, jsonSize, invalid );
 
         if ( sizeIncrease != jsonSize )
             console.error( "MumeMapIndex: stray index entries in %O?", json );
