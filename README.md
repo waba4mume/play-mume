@@ -21,9 +21,10 @@ There is a `Clone or download > Download ZIP` green button in the top right
 section of each of these links, or just use Git.
 
 Make sure to download the right branches!
-- For the stable version (ready to play): use the default `master` branches.
-- For the experimental version with a mapper, download `input-filter` from
-  DecafMUD and `mapper` from play-mume.
+- For the work-in-progress version with a mapper: use the default `master`
+  branches.
+- For the stable version, download `v0.9` from DecafMUD and `v1.0` from
+  play-mume.
 
 ## Compilation
 
