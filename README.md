@@ -32,7 +32,7 @@ Some of the code will need compiling from TypeScript (`src/*`) to JavaScript
 (`build/*`). You will need to install TypeScript compiler from
 https://www.typescriptlang.org and run in `play`:
 
-  tsc -p .
+    tsc
 
 TypeScript helps catching bugs before anybody even tests the code, letting me
 produce more features in less time.
