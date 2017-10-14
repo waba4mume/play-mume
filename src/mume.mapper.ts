@@ -17,14 +17,14 @@ enum Dir { // Must match MM2's defs.
 
 /* Like JQuery.when(), but the master Promise is resolved only when all
  * promises are resolved or rejected, not at the first rejection. */
-function whenAll( deferreds: Array<JQueryPromise<any>> )
+function whenAll<T>( deferreds: Array<JQueryPromise<T>> )
 {
-    let master: JQueryDeferred<any> = jQuery.Deferred();
+    let master: JQueryDeferred<T> = jQuery.Deferred();
 
     if ( deferreds.length === 0 )
         return master.resolve();
 
-    let pending = new Set<JQueryPromise<any>>();
+    let pending = new Set<JQueryPromise<T>>();
     for ( let dfr of deferreds )
         pending.add( dfr );
 
@@ -87,17 +87,18 @@ export class MumeMap
     public mapIndex: MumeMapIndex;
     public display: MumeMapDisplay;
     public pathMachine: MumePathMachine;
-    public processTag: any;
+    public processTag: ( event: never, tag: MumeXmlParserTag ) => void;
     public static debugInstance: MumeMap;
 
-    constructor( containerElementName: any )
+    constructor( containerElementName: string )
     {
         this.mapData = new MumeMapData();
         this.mapIndex = new MumeMapIndex();
         this.display = new MumeMapDisplay( containerElementName, this.mapData );
 
         this.pathMachine = new MumePathMachine( this.mapData, this.mapIndex );
-        this.processTag = this.pathMachine.processTag.bind( this.pathMachine );
+        this.processTag =
+            ( event: never, tag: MumeXmlParserTag ) => this.pathMachine.processTag( event, tag );
 
         MumeMap.debugInstance = this;
     }
@@ -111,7 +112,7 @@ export class MumeMap
         } );
     }
 
-    public onMovement( event: any, where: RoomCoords ): void
+    public onMovement( event: never, where: RoomCoords ): void
     {
         this.display.repositionHere( where ).done( () =>
         {
@@ -145,7 +146,7 @@ class MumePathMachine
 
     /* This receives an event from MumeXmlParser when it encounters a closing tag.
      * */
-    public processTag( event: any, tag: any ): void
+    public processTag( event: never, tag: MumeXmlParserTag ): void
     {
         console.log( "MumePathMachine processes tag " + tag.name );
         if ( tag.name === "name" )
@@ -334,7 +335,7 @@ class MumeMapIndex
 /* This is a RoomCoords shifted by metaData.minX/Y/Z to fit a zero-based Array. */
 class ZeroedRoomCoords
 {
-    private preventDuckTyping: any;
+    private preventDuckTyping: never;
 
     public x: number;
     public y: number;
@@ -351,7 +352,7 @@ class ZeroedRoomCoords
 /* Room coordinates, comprised in metaData.minX .. maxX etc. */
 class RoomCoords
 {
-    private preventDuckTyping: any;
+    private preventDuckTyping: never;
 
     public x: number;
     public y: number;
@@ -446,7 +447,7 @@ class MapMetaData
 }
 
 interface RoomId extends Number {
-    _roomIdBrand: string; // Prevent implicit conversion with Number
+    _roomIdBrand: never; // Prevent implicit conversion with Number
 }
 
 // This is what we load from the server, inside RoomData.
@@ -463,7 +464,7 @@ class RoomData
 {
     name: string = "";
     desc: string = "";
-    id: RoomId = 0 as any;
+    id: RoomId = <any>0; // RoomIds are not meant to be created, yet we need a placeholder
     x: number = 0;
     y: number = 0;
     z: number = 0;
@@ -559,7 +560,7 @@ class MumeMapData
     /* Returns a room from the in-memory cache or null if not found. Does not
      * attempt to download the zone if it's missing from the cache.
      */
-    public getRoomAtCached( c: RoomCoords ): any
+    public getRoomAtCached( c: RoomCoords ): Room | null
     {
         let room = this.rooms.get( c );
 
@@ -578,7 +579,7 @@ class MumeMapData
     };
 
     private getRoomResultAtCached( c: RoomCoords,
-        result: JQueryDeferred<any> ): JQueryDeferred<any>
+        result: JQueryDeferred<Room> ): JQueryDeferred<Room>
     {
         let room = this.getRoomAtCached( c );
         if ( room === null )
@@ -665,7 +666,7 @@ class MumeMapData
     };
 
     /* Fetches a room from the cache or the server. Returns a jQuery Deferred. */
-    public getRoomAt( c: RoomCoords ): JQueryDeferred<any>
+    public getRoomAt( c: RoomCoords ): JQueryDeferred<Room>
     {
         let result = jQuery.Deferred();
 
@@ -1260,7 +1261,7 @@ export class MumeXmlParser
     private tagStack: Array<MumeXmlParserTag>;
     private plainText: string;
 
-    constructor( decaf: any )
+    constructor( decaf: never )
     {
         this.clear();
     }
