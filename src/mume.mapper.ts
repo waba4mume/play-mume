@@ -1215,6 +1215,15 @@ interface MumeXmlParserTag
     text: string;
 }
 
+enum MumeXmlMode
+{
+    // Not requested. We won't interpret <xml> tags, as players could send us fakes.
+    Off,
+    // We requested XML mode and will enable it as soon as we get a <xml>
+    Desirable,
+    // We are in XML mode, interpreting <tags>
+    On,
+}
 
 /* Filters out the XML-like tags that MUME can send in "XML mode", and sends
  * them as events instead.
@@ -1260,9 +1269,13 @@ export class MumeXmlParser
 {
     private tagStack: Array<MumeXmlParserTag>;
     private plainText: string;
+    private mode: MumeXmlMode;
+    private xmlDesirableBytes: number = 0;
+    private decaf: DecafMUD;
 
-    constructor( decaf: never )
+    constructor( decaf: DecafMUD )
     {
+        this.decaf = decaf;
         this.clear();
     }
 
@@ -1272,11 +1285,54 @@ export class MumeXmlParser
     {
         this.tagStack = [];
         this.plainText = "";
+        this.mode = MumeXmlMode.Off;
     };
 
     public connected(): void
     {
         this.clear();
+
+        // request XML mode + gratuitous descs
+        this.decaf.socket.write( "~$#EX2\n1G\n" );
+        this.setXmlModeDesirable();
+    }
+
+    private setXmlModeDesirable(): void
+    {
+        this.mode = MumeXmlMode.Desirable;
+        this.xmlDesirableBytes = 0;
+    }
+
+    private detectXml( input: string ): { text: string, xml: string, }
+    {
+        switch ( this.mode )
+        {
+        case MumeXmlMode.Off:
+            return { text: input, xml: "", };
+
+        case MumeXmlMode.On:
+            return { text: "", xml: input, };
+
+        case MumeXmlMode.Desirable:
+            let xmlStart = input.indexOf( "<xml>", 0 );
+
+            // If somehow XML doesn't get enabled right after we asked for it, at
+            // least the xmlDesirableBytes will reduce the window during which
+            // someone might send us a fake <xml> tag and confuse the parser, which
+            // would be dangerous in the middle of PK for example.
+            if ( xmlStart !== -1 && this.xmlDesirableBytes + xmlStart < 1024 )
+            {
+                this.mode = MumeXmlMode.On;
+                return { text: input.substr( 0, xmlStart ), xml: input.substr( xmlStart ), };
+            }
+
+            if ( this.xmlDesirableBytes >= 1024 )
+                this.mode = MumeXmlMode.Off;
+
+            this.xmlDesirableBytes += input.length;
+
+            return { text: input, xml: "", };
+        }
     }
 
     private topTag(): MumeXmlParserTag | null
@@ -1285,7 +1341,18 @@ export class MumeXmlParser
             return null;
         else
             return this.tagStack[ this.tagStack.length - 1 ];
-    };
+    }
+
+    // True if the current input is wrapped in <gratuitous>, ie. something for
+    // the benefit of the client but that the player doesn't want to see.
+    private isGratuitous(): boolean
+    {
+        for ( let tag of this.tagStack )
+            if ( tag.name === "gratuitous" )
+                return true;
+
+        return false;
+    }
 
     private resetPlainText(): string
     {
@@ -1293,7 +1360,7 @@ export class MumeXmlParser
         this.plainText = "";
 
         return plainText;
-    };
+    }
 
     /* Matches a start or end tag and captures the following:
      * 1. any text preceeding the tag
@@ -1309,9 +1376,7 @@ export class MumeXmlParser
 
     private static decodeEntities( text: string ): string
     {
-        var decodedText;
-
-        decodedText = text
+        let decodedText = text
             .replace( /&lt;/g, "<" )
             .replace( /&gt;/g, ">" )
             .replace( /&amp;/g, "&" );
@@ -1321,25 +1386,24 @@ export class MumeXmlParser
 
     /* Takes text with pseudo-XML as input, returns plain text and emits events.
      */
-    public filterInputText( input: string ): string
+    public filterInputText( rawInput: string ): string
     {
-        var matches, isEnd, isLeaf, tagName, attr, textBefore, textAfter, matched;
+        if ( this.mode === MumeXmlMode.Off )
+            return rawInput;
 
-        while ( ( matches = MumeXmlParser.TAG_RE.exec( input ) ) !== null )
+        let input = this.detectXml( rawInput );
+        let matched: boolean = false;
+        let matches: RegExpExecArray | null;
+
+        while ( ( matches = MumeXmlParser.TAG_RE.exec( input.xml ) ) !== null )
         {
-            textBefore = matches[1];
-            isEnd      = matches[2];
-            tagName    = matches[3];
-            attr       = matches[4];
-            isLeaf     = matches[5];
-            textAfter  = matches[6];
+            let textBefore, isEnd, tagName, attr, isLeaf, textAfter;
+            [ , textBefore, isEnd, tagName, attr, isLeaf, textAfter ] = matches;
 
             matched = true;
 
             if ( textBefore )
-            {
                 this.pushText( textBefore );
-            }
 
             if ( isLeaf )
             {
@@ -1356,18 +1420,16 @@ export class MumeXmlParser
             }
 
             if ( textAfter )
-            {
                 this.pushText( textAfter );
-            }
         }
 
         if ( ! matched )
-            return input;
+            return rawInput;
 
-        return this.resetPlainText();
+        return input.text + this.resetPlainText();
     };
 
-    public pushText( text: string ): void
+    private pushText( text: string ): void
     {
         var topTag, error;
 
@@ -1378,7 +1440,7 @@ export class MumeXmlParser
         {
             this.plainText += text;
         }
-        else if ( topTag.text.length > 4096 )
+        else if ( topTag.text.length > 1024 )
         {
             error = "Probable bug: run-away MumeXmlParser tag " + topTag.name +
                 ", text: " + topTag.text.substr( 0, 50 );
@@ -1387,12 +1449,13 @@ export class MumeXmlParser
         }
         else
         {
-            this.plainText += text;
+            if ( !this.isGratuitous() )
+                this.plainText += text;
             topTag.text += text;
         }
     };
 
-    public startTag( tagName: string, attr: string )
+    private startTag( tagName: string, attr: string ): void
     {
         this.tagStack.push( { name: tagName, attr: attr, text: "" } );
 
@@ -1403,9 +1466,15 @@ export class MumeXmlParser
         return;
     };
 
-    public endTag( tagName: string )
+    private endTag( tagName: string ): void
     {
         let matchingTagIndex: number | null = null;
+
+        // Most likely, the player typed "cha xml" by mistake. Hopefully he'll
+        // reenable it soon, otherwise we prefer to break rather than remain
+        // wide open to attack.
+        if ( tagName === "xml" )
+            this.setXmlModeDesirable();
 
         // Find the uppermost tag in the stack which matches tagName
         for ( let i = this.tagStack.length - 1; i >= 0; ++i )
