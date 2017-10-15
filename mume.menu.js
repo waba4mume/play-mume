@@ -34,25 +34,5 @@ function open_mume_map_window()
         alert( "Your browser refused to open the map window, you have to allow it "
             +"somewhere near the top right corner of your screen. Look for a "
             +"notification about blocking popups." );
-        return;
     }
-
-    mapWindow.addEventListener( "load", function( e )
-    {
-        var parser, map;
-
-        parser = DecafMUD.instances[0].textInputFilter;
-        if ( !( parser instanceof Mapper.MumeXmlParser ) )
-        {
-            throw "Bug: expected to find a MumeXmlParser installed as "
-                +"DecafMUD input text filter, found: " + typeof parser + " "
-                +"(possible cause: textinputfilter DecafMUD option not set to "
-                +"'mumexml'.";
-        }
-
-        map = mapWindow.globalMap;
-        $(parser).on( Mapper.MumeXmlParser.SIG_TAG_END, map.processTag.bind( map ) );
-
-        console.log( "The main window will now send data to the map window" );
-    } );
 }

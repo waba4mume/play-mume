@@ -83,19 +83,18 @@ function translitUnicodeToAsciiLikeMMapper( unicode: string ): string
 /* This is the "entry point" to this library for the rest of the code. */
 export class MumeMap
 {
-    public mapData: MumeMapData;
-    public mapIndex: MumeMapIndex;
+    public mapData: MumeMapData | null = null;
+    public mapIndex: MumeMapIndex | null = null;
     public display: MumeMapDisplay;
     public pathMachine: MumePathMachine;
     public processTag: ( event: never, tag: MumeXmlParserTag ) => void;
     public static debugInstance: MumeMap;
 
-    constructor( containerElementName: string )
+    constructor( mapData: MumeMapData, display: MumeMapDisplay )
     {
-        this.mapData = new MumeMapData();
+        this.mapData = mapData;
+        this.display = display;
         this.mapIndex = new MumeMapIndex();
-        this.display = new MumeMapDisplay( containerElementName, this.mapData );
-
         this.pathMachine = new MumePathMachine( this.mapData, this.mapIndex );
         this.processTag =
             ( event: never, tag: MumeXmlParserTag ) => this.pathMachine.processTag( event, tag );
@@ -103,13 +102,24 @@ export class MumeMap
         MumeMap.debugInstance = this;
     }
 
-    public load(): void
+    public static load( containerElementName: string ): JQueryPromise<MumeMap>
     {
-        this.mapData.load().done( () =>
+        let result = jQuery.Deferred();
+
+        MumeMapData.load().done( ( mapData: MumeMapData ) =>
         {
-            this.display.loadMap();
-            $(this.pathMachine).on( MumePathMachine.SIG_MOVEMENT, this.onMovement.bind( this ) );
+            MumeMapDisplay.load( containerElementName, mapData ).done( ( display: MumeMapDisplay ) => {
+                let map = new MumeMap( mapData, display );
+
+                $( map.pathMachine ).on(
+                    MumePathMachine.SIG_MOVEMENT,
+                    ( event: never, where: RoomCoords ) => map.onMovement( event, where ) );
+
+                result.resolve( map );
+            } );
         } );
+
+        return result;
     }
 
     public onMovement( event: never, where: RoomCoords ): void
@@ -121,8 +131,6 @@ export class MumeMap
         } );
     }
 }
-
-
 
 
 
@@ -444,6 +452,17 @@ class MapMetaData
     minY: number = 0;
     minZ: number = 0;
     roomsCount: number = 0;
+
+    public static assertValid( json: MapMetaData ): void
+    {
+        let missing = new Array<string>();
+        for ( let prop in new MapMetaData() )
+            if ( !json.hasOwnProperty( prop ) )
+                missing.push( prop );
+
+        if ( missing.length !== 0 )
+            throw "Missing properties in loaded metadata: " + missing.join( ", " );
+    }
 }
 
 interface RoomId extends Number {
@@ -499,9 +518,9 @@ class MumeMapData
     /* These zones are known not to exist on the server. */
     private nonExistentZones = new Set<string>();
     /* Publicly readable, guaranteed to hold REQUIRED_META_PROPS. */
-    public metaData: MapMetaData | null;
+    public metaData: MapMetaData;
     /* Private in-memory room cache. */
-    private rooms: SpatialIndex<Room> | null;
+    private rooms: SpatialIndex<Room>;
 
     // Arda is split into JSON files that wide.
     private static readonly ZONE_SIZE = 20;
@@ -509,18 +528,22 @@ class MumeMapData
     /* Initiates loading the external JSON map data.
      * Returns a JQuery Deferred that can be used to execute further code once done.
      */
-    public load(): JQueryDeferred<void>
+    public static load(): JQueryPromise<MumeMapData>
     {
         let result = jQuery.Deferred();
 
         jQuery.getJSON( MAP_DATA_PATH + "arda.json" )
-            .done( ( json: any ) =>
+            .done( ( json: MapMetaData ) =>
             {
                 console.log( "Map metadata loaded" );
-                if ( ! this.setMetadata( json ) )
+                let map: MumeMapData;
+                try {
+                    result.resolve( new MumeMapData( json ) );
+                }
+                catch ( e )
+                {
                     result.reject();
-                else
-                    result.resolve();
+                }
             } )
             .fail( function( jqxhr, textStatus, error )
             {
@@ -531,31 +554,18 @@ class MumeMapData
         return result;
     };
 
-    /* Private helper that checks the validity of json */
-    private setMetadata( json: any ): boolean
+    constructor( json: MapMetaData )
     {
-        let missing = new Array<string>();
-        for ( let prop in new MapMetaData() )
-            if ( !json.hasOwnProperty( prop ) )
-                missing.push( prop );
-
-        if ( missing.length !== 0 )
-        {
-            console.error( "Missing properties in loaded metadata: %O", missing );
-            return false;
-        }
-
+        MapMetaData.assertValid( json );
         this.metaData = <MapMetaData>json;
         this.rooms = new SpatialIndex<Room>( json );
-
-        return true;
-    };
+    }
 
     /* Private helper that feeds the in-memory cache. */
     private setCachedRoom( room: Room ): void
     {
         this.rooms.set( room.coords(), room );
-    };
+    }
 
     /* Returns a room from the in-memory cache or null if not found. Does not
      * attempt to download the zone if it's missing from the cache.
@@ -997,7 +1007,6 @@ namespace Mm2Gfx
 class MumeMapDisplay
 {
     private mapData: MumeMapData;
-    private containerElementName: string;
     private roomDisplays: SpatialIndex<PIXI.Container>;
 
     // PIXI elements
@@ -1006,35 +1015,47 @@ class MumeMapDisplay
     private layers: Array<PIXI.Container> = [];
     private renderer: PIXI.SystemRenderer;
 
+    // Use load() instead if the assets might not have been loaded yet.
     constructor( containerElementName: string, mapData: MumeMapData )
     {
         this.mapData = mapData;
-        this.containerElementName = containerElementName;
+        this.roomDisplays = new SpatialIndex( this.mapData.metaData );
+
+        this.installMap( containerElementName );
+        this.buildMapDisplay();
+
+    }
+
+    // Async factory function. Returns a Display when the prerequisites are loaded.
+    public static load( containerElementName: string, mapData: MumeMapData ): JQueryPromise<MumeMapDisplay>
+    {
+        let result = jQuery.Deferred();
+
+        // Start loading assets
+        PIXI.loader.add( Mm2Gfx.getAllAssetPaths() );
+        PIXI.loader.load( () => {
+            let display = new MumeMapDisplay( containerElementName, mapData );
+            result.resolve( display );
+        } );
+
+        return result;
     }
 
     /* Installs the viewport into the DOM and starts loading textures etc (assets).
      * The loading continues in background, after which buildMapDisplay() is
      * called. */
-    public loadMap(): void
+    public installMap( containerElementName: string ): void
     {
-        var stub;
-
-        // We need the metaData to be loaded to init the SpatialIndex.
-        this.roomDisplays = new SpatialIndex( this.mapData.metaData );
-
         // Set the Pixi viewport as the content of that new window
         this.stage = new PIXI.Container();
         this.renderer = PIXI.autoDetectRenderer( 800, 600 );
         this.renderer.backgroundColor = 0x6e6e6e;
-        stub = document.getElementById( this.containerElementName );
-        stub.parentElement.replaceChild( this.renderer.view, stub );
-        this.renderer.view.id = this.containerElementName;
 
-        // Start loading assets
-        PIXI.loader.add( Mm2Gfx.getAllAssetPaths() );
-        PIXI.loader.load( this.buildMapDisplay.bind( this ) );
-
-        return;
+        let stub = document.getElementById( containerElementName );
+        if ( stub == null || stub.parentElement == null )
+            $( "body" ).append( this.renderer.view );
+        else
+            stub.parentElement.replaceChild( this.renderer.view, stub );
     };
 
     /* Called when all assets are available. Constructs the graphical structure
@@ -1042,11 +1063,9 @@ class MumeMapDisplay
      * (Pixi lib). */
     public buildMapDisplay(): void
     {
-        var map;
-
         // Everything belongs to the map, so we can move it around to emulate
         // moving the viewport
-        map = new PIXI.Container();
+        let map = new PIXI.Container();
 
         // Rooms live on layers, there is one layer per z coord
         for ( let i = 0; i < this.mapData.metaData.maxZ - this.mapData.metaData.minZ; ++i )
@@ -1267,6 +1286,9 @@ enum MumeXmlMode
  */
 export class MumeXmlParser
 {
+    // instanceof doesn't work cross-window
+    private readonly isMumeXmlParser = true;
+
     private tagStack: Array<MumeXmlParserTag>;
     private plainText: string;
     private mode: MumeXmlMode;

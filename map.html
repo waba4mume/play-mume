@@ -7,15 +7,41 @@
     <script src="libs/spark-md5.min.js" type="text/javascript"></script>
     <script src="built/mume.mapper.js" type="text/javascript"></script>
     <script type="text/javascript">
-        var globalMap;
         (function() {
             "use strict";
 
-            globalMap = new Mapper.MumeMap( "map" );
+            var tagEventHandler;
 
-            window.addEventListener( "load", function( e )
+            $( window ).on( "load", function( e )
             {
-                globalMap.load();
+                Mapper.MumeMap.load( "map" ).done( function( map )
+                {
+                    var parser;
+
+                    parser = window.opener.DecafMUD.instances[0].textInputFilter;
+                    if ( !( parser.isMumeXmlParser ) )
+                    {
+                        throw "Bug: expected to find a MumeXmlParser installed as "
+                            +"DecafMUD input text filter, found: " + typeof parser + " "
+                            +"(possible cause: textinputfilter DecafMUD option not set to "
+                            +"'mumexml'.";
+                    }
+
+                    /* jQuery maintains an internal list of event handlers, and
+                       there is an instance per window. Our registration must end
+                       up in the jQuery instance that will be requested to emit
+                       the event. */
+                    tagEventHandler = map.processTag.bind( map );
+                    window.opener.$( parser ).on( Mapper.MumeXmlParser.SIG_TAG_END, tagEventHandler );
+
+                    console.log( "The main window will now send data to the map window" );
+                } );
+            } );
+
+            $( window ).on( "unload", function( e )
+            {
+                if ( tagEventHandler )
+                    window.opener.$( parser ).off( Mapper.MumeXmlParser.SIG_TAG_END, tagEventHandler );
             } );
         })();
     </script>
