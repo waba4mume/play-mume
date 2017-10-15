@@ -1490,16 +1490,15 @@ export class MumeXmlParser
 
     private endTag( tagName: string ): void
     {
-        let matchingTagIndex: number | null = null;
-
         // Most likely, the player typed "cha xml" by mistake. Hopefully he'll
         // reenable it soon, otherwise we prefer to break rather than remain
         // wide open to attack.
         if ( tagName === "xml" )
             this.setXmlModeDesirable();
 
-        // Find the uppermost tag in the stack which matches tagName
-        for ( let i = this.tagStack.length - 1; i >= 0; ++i )
+        // Find the most recent tag in the stack which matches tagName
+        let matchingTagIndex: number | null = null;
+        for ( let i = this.tagStack.length - 1; i >= 0; --i )
         {
             if ( this.tagStack[i].name === tagName )
             {
