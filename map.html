@@ -40,6 +40,8 @@
 
             $( window ).on( "unload", function( e )
             {
+                var parser;
+                parser = window.opener.DecafMUD.instances[0].textInputFilter;
                 if ( tagEventHandler )
                     window.opener.$( parser ).off( Mapper.MumeXmlParser.SIG_TAG_END, tagEventHandler );
             } );
