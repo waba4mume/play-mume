@@ -13,7 +13,7 @@ enum Dir { // Must match MM2's defs.
     DOWN = 5,
     NONE = 6,
     UNKNOWN = 7,
-};
+}
 
 /* Like JQuery.when(), but the master Promise is resolved only when all
  * promises are resolved or rejected, not at the first rejection. */
@@ -48,7 +48,7 @@ function mapKeys<T, U>( map: Map<T, U> )
     let keys: Array<T> = [];
     map.forEach( function( value, key ) { keys.push( key ); } );
     return keys;
-};
+}
 
 // Adapted from MMapper2: the result must be identical for the hashes to match
 function translitUnicodeToAsciiLikeMMapper( unicode: string ): string
@@ -416,7 +416,7 @@ class SpatialIndex<T>
             this.data[ zero.x ][ zero.y ] = [];
 
         this.data[ zero.x ][ zero.y ][ zero.z ] = what;
-    };
+    }
 
     /* Public. */
     public get( c: RoomCoords ): T | null
@@ -433,7 +433,7 @@ class SpatialIndex<T>
         {
             return null;
         }
-    };
+    }
 }
 
 
@@ -552,7 +552,7 @@ class MumeMapData
             } );
 
         return result;
-    };
+    }
 
     constructor( json: MapMetaData )
     {
@@ -586,7 +586,7 @@ class MumeMapData
                 x, y, z );*/
             return null;
         }
-    };
+    }
 
     private getRoomResultAtCached( c: RoomCoords,
         result: JQueryDeferred<Room> ): JQueryDeferred<Room>
@@ -596,7 +596,7 @@ class MumeMapData
             return result.reject();
         else
             return result.resolve( room );
-    };
+    }
 
     /* Stores a freshly retrieved JSON zone into the in-memory cache. Returns
      * the rooms added to the cache. */
@@ -632,7 +632,7 @@ class MumeMapData
         console.log( "MumeMapData cached %d rooms for zone %s", cached, zone );
         this.cachedZones.add( zone );
         return cached;
-    };
+    }
 
     /* Returns the x,y zone for that room's coords, or null if out of the map.
      */
@@ -647,7 +647,7 @@ class MumeMapData
         let zone = zoneX + "," + zoneY;
 
         return zone;
-    };
+    }
 
     /* Private. */
     private downloadAndCacheZone( zone: string ): JQueryDeferred<void>
@@ -673,7 +673,7 @@ class MumeMapData
             } );
 
         return result;
-    };
+    }
 
     /* Fetches a room from the cache or the server. Returns a jQuery Deferred. */
     public getRoomAt( c: RoomCoords ): JQueryDeferred<Room>
@@ -694,7 +694,7 @@ class MumeMapData
             } );
 
         return result;
-    };
+    }
 
     /* Fetches rooms at an Array of x/y/z coords from the cache or the server.
      * Returns arrays of rooms through a jQuery Deferred. Partial results are
@@ -1056,7 +1056,7 @@ class MumeMapDisplay
             $( "body" ).append( this.renderer.view );
         else
             stub.parentElement.replaceChild( this.renderer.view, stub );
-    };
+    }
 
     /* Called when all assets are available. Constructs the graphical structure
      * (layers etc) used for rendering and throw all that at the rendering layer
@@ -1085,7 +1085,7 @@ class MumeMapDisplay
         this.refresh();
 
         return;
-    };
+    }
 
     private roomCoordsToPoint( where: RoomCoords): PIXI.Point
     {
@@ -1217,12 +1217,12 @@ class MumeMapDisplay
             } );
 
         return result;
-    };
+    }
 
     public refresh(): void
     {
         this.renderer.render( this.stage );
-    };
+    }
 }
 
 
@@ -1308,7 +1308,7 @@ export class MumeXmlParser
         this.tagStack = [];
         this.plainText = "";
         this.mode = MumeXmlMode.Off;
-    };
+    }
 
     public connected(): void
     {
@@ -1404,7 +1404,7 @@ export class MumeXmlParser
             .replace( /&amp;/g, "&" );
 
         return decodedText;
-    };
+    }
 
     /* Takes text with pseudo-XML as input, returns plain text and emits events.
      */
@@ -1449,7 +1449,7 @@ export class MumeXmlParser
             return rawInput;
 
         return input.text + this.resetPlainText();
-    };
+    }
 
     private pushText( text: string ): void
     {
@@ -1476,7 +1476,7 @@ export class MumeXmlParser
 
             topTag.text += text;
         }
-    };
+    }
 
     private startTag( tagName: string, attr: string ): void
     {
@@ -1488,7 +1488,7 @@ export class MumeXmlParser
         }
 
         this.tagStack.push( { name: tagName, attr: attr, text: "" } );
-    };
+    }
 
     private endTag( tagName: string ): void
     {
@@ -1529,7 +1529,7 @@ export class MumeXmlParser
 
         let topTag = this.tagStack.pop();
         $(this).triggerHandler( MumeXmlParser.SIG_TAG_END, [ topTag, ] );
-    };
+    }
 }
 
 } // ns
