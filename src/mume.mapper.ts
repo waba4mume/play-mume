@@ -1462,39 +1462,43 @@ export class MumeXmlParser
         {
             this.plainText += text;
         }
-        else if ( topTag.text.length > 1024 )
-        {
-            error = "Probable bug: run-away MumeXmlParser tag " + topTag.name +
-                ", text: " + topTag.text.substr( 0, 50 );
-            this.tagStack.pop();
-            throw error;
-        }
         else
         {
+            if ( topTag.text.length + text.length > 1500 )
+            {
+                console.warn( "Run-away MumeXmlParser tag " +
+                    topTag.name + ", force-closing the tag." );
+                this.tagStack.pop();
+            }
+
             if ( !this.isGratuitous() )
                 this.plainText += text;
+
             topTag.text += text;
         }
     };
 
     private startTag( tagName: string, attr: string ): void
     {
-        this.tagStack.push( { name: tagName, attr: attr, text: "" } );
-
         if ( this.tagStack.length > 5 )
-            throw "Bug: deeply nested MumeXmlParser tags: " +
-                this.tagStack.join();
+        {
+            let tags = this.tagStack.map( t => t.name ).join();
+            console.warn( `Ignoring MumeXmlParser tag ${tagName} because of deeply nested tags: ${tags}` );
+            return;
+        }
 
-        return;
+        this.tagStack.push( { name: tagName, attr: attr, text: "" } );
     };
 
     private endTag( tagName: string ): void
     {
-        // Most likely, the player typed "cha xml" by mistake. Hopefully he'll
-        // reenable it soon, otherwise we prefer to break rather than remain
-        // wide open to attack.
         if ( tagName === "xml" )
+        {
+            // Most likely, the player typed "cha xml" by mistake. Hopefully he'll
+            // reenable it soon, otherwise we prefer to break rather than remain
+            // wide open to attack.
             this.setXmlModeDesirable();
+        }
 
         // Find the most recent tag in the stack which matches tagName
         let matchingTagIndex: number | null = null;
@@ -1509,15 +1513,18 @@ export class MumeXmlParser
 
         // Perform some sanity checks
         if ( matchingTagIndex == null )
-            throw "Bug: unmatched closing MumeXmlParser tag " + tagName;
-        else if ( matchingTagIndex !== this.tagStack.length - 1 )
         {
-            let error = "Bug: closing MumeXmlParser tag " + tagName +
-                " with the following other tags open: " +
-                this.tagStack.slice( matchingTagIndex + 1 ).join();
+            console.warn( "Ignoring unmatched closing MumeXmlParser tag " + tagName );
+            return;
+        }
+        else if ( matchingTagIndex + 1 !== this.tagStack.length )
+        {
+            let tags = this.tagStack.slice( matchingTagIndex + 1 ).map( t => t.name ).join();
+            console.warn( "Closing MumeXmlParser tag " + tagName +
+                " with the following other tags open: " + tags );
+            this.tagStack.length = matchingTagIndex + 1;
 
-            this.tagStack = [];
-            throw error;
+            // fall through
         }
 
         let topTag = this.tagStack.pop();
