@@ -1238,6 +1238,8 @@ enum MumeXmlMode
 {
     // Not requested. We won't interpret <xml> tags, as players could send us fakes.
     Off,
+    // We will request XML mode as soon as we're done with the login prompt.
+    AsSoonAsPossible,
     // We requested XML mode and will enable it as soon as we get a <xml>
     Desirable,
     // We are in XML mode, interpreting <tags>
@@ -1313,10 +1315,7 @@ export class MumeXmlParser
     public connected(): void
     {
         this.clear();
-
-        // request XML mode + gratuitous descs
-        this.decaf.socket.write( "~$#EX2\n1G\n" );
-        this.setXmlModeDesirable();
+        this.mode = MumeXmlMode.AsSoonAsPossible;
     }
 
     private setXmlModeDesirable(): void
@@ -1325,15 +1324,34 @@ export class MumeXmlParser
         this.xmlDesirableBytes = 0;
     }
 
+    private static readonly ENTER_GAME_LINES = new RegExp(
+        /^Reconnecting\.\s*$/.source + "|" +
+        /^Never forget! Try to role-play\.\.\.\s*$/.source, 'm' );
+
     private detectXml( input: string ): { text: string, xml: string, }
     {
         switch ( this.mode )
         {
+        case MumeXmlMode.AsSoonAsPossible:
+            if ( input.match( MumeXmlParser.ENTER_GAME_LINES ) )
+            {
+                // Negociating XML mode at once sends a double login prompt,
+                // which is unsightly as it is the first thing that players
+                // see. WebSockets do not let us send the negociation string
+                // before the MUD outputs anything, like MM2 does.
+
+                // Wait until we're done with the pre-play to request XML mode +
+                // gratuitous descs. Hopefully, the first screen won't be split
+                // across filterInputText() calls, or we'll have to keep state.
+                this.decaf.socket.write( "~$#EX2\n1G\n" );
+                this.setXmlModeDesirable();
+                console.log( "Negotiating MUME XML mode" );
+            }
+
+            // fall through
+
         case MumeXmlMode.Off:
             return { text: input, xml: "", };
-
-        case MumeXmlMode.On:
-            return { text: "", xml: input, };
 
         case MumeXmlMode.Desirable:
             let xmlStart = input.indexOf( "<xml>", 0 );
@@ -1344,6 +1362,7 @@ export class MumeXmlParser
             // would be dangerous in the middle of PK for example.
             if ( xmlStart !== -1 && this.xmlDesirableBytes + xmlStart < 1024 )
             {
+                console.log( "Enabled MUME XML mode" );
                 this.mode = MumeXmlMode.On;
                 return { text: input.substr( 0, xmlStart ), xml: input.substr( xmlStart ), };
             }
@@ -1354,6 +1373,9 @@ export class MumeXmlParser
             this.xmlDesirableBytes += input.length;
 
             return { text: input, xml: "", };
+
+        case MumeXmlMode.On:
+            return { text: "", xml: input, };
         }
     }
 
