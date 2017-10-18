@@ -1468,7 +1468,7 @@ export class MumeXmlParser
         }
 
         if ( ! matched )
-            return rawInput;
+            this.pushText( input.xml );
 
         return input.text + this.resetPlainText();
     }
