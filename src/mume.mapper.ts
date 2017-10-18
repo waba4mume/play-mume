@@ -1246,6 +1246,44 @@ enum MumeXmlMode
     On,
 }
 
+class ScoutingState
+{
+    public state: boolean = false;
+    // We stop scouting automatically after a bit if somehow we missed the STOP message
+    private scoutingBytes: number = 0;
+
+    private static readonly START = /^You quietly scout (north|east|south|west|up|down)wards\.\.\.\s*$/m;
+    private static readonly STOP = /^You stop scouting\.\s*$/m;
+
+    public update( text: string ): void
+    {
+        let startMatch = text.match( ScoutingState.START );
+        if ( startMatch )
+        {
+            let startIndex = startMatch.index;
+            if ( startIndex === undefined )
+                startIndex = text.indexOf( "You quietly scout" ); // Shouldn't happen, but it does keep TS happy
+            this.scoutingBytes = text.length - ( startIndex + startMatch[0].length );
+
+            this.state = true;
+            console.log( "Starting to scout, ignoring new rooms." );
+        }
+        else if ( this.state )
+        {
+            if ( text.match( ScoutingState.STOP ) )
+            {
+                this.state = false;
+                console.log( "Done scouting." );
+            }
+            else if ( this.scoutingBytes + text.length > 1024 )
+            {
+                this.state = false;
+                console.warn( "Force-disabling scout mode after a while" );
+            }
+        }
+    }
+};
+
 /* Filters out the XML-like tags that MUME can send in "XML mode", and sends
  * them as events instead.
  *
@@ -1296,6 +1334,7 @@ export class MumeXmlParser
     private mode: MumeXmlMode;
     private xmlDesirableBytes: number = 0;
     private decaf: DecafMUD;
+    private scouting: ScoutingState
 
     constructor( decaf: DecafMUD )
     {
@@ -1310,6 +1349,7 @@ export class MumeXmlParser
         this.tagStack = [];
         this.plainText = "";
         this.mode = MumeXmlMode.Off;
+        this.scouting = new ScoutingState();
     }
 
     public connected(): void
@@ -1473,12 +1513,12 @@ export class MumeXmlParser
         return input.text + this.resetPlainText();
     }
 
-    private pushText( text: string ): void
+    private pushText( raw: string ): void
     {
-        var topTag, error;
+        let text = MumeXmlParser.decodeEntities( raw );
+        let topTag = this.topTag();
 
-        text = MumeXmlParser.decodeEntities( text );
-        topTag = this.topTag();
+        this.scouting.update( text );
 
         if ( !topTag || topTag.name === "xml" )
         {
@@ -1550,7 +1590,8 @@ export class MumeXmlParser
         }
 
         let topTag = this.tagStack.pop();
-        $(this).triggerHandler( MumeXmlParser.SIG_TAG_END, [ topTag, ] );
+        if ( !this.scouting.state )
+            $(this).triggerHandler( MumeXmlParser.SIG_TAG_END, [ topTag, ] );
     }
 }
 
