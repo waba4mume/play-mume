@@ -1248,7 +1248,7 @@ enum MumeXmlMode
 
 class ScoutingState
 {
-    public state: boolean = false;
+    public active: boolean = false;
     // We stop scouting automatically after a bit if somehow we missed the STOP message
     private scoutingBytes: number = 0;
 
@@ -1265,21 +1265,21 @@ class ScoutingState
                 startIndex = text.indexOf( "You quietly scout" ); // Shouldn't happen, but it does keep TS happy
             this.scoutingBytes = text.length - ( startIndex + startMatch[0].length );
 
-            this.state = true;
+            this.active = true;
             console.log( "Starting to scout, ignoring new rooms." );
         }
-        else if ( this.state )
+        else if ( this.active )
         {
             this.scoutingBytes += text.length;
 
             if ( text.match( ScoutingState.STOP ) )
             {
-                this.state = false;
+                this.active = false;
                 console.log( "Done scouting." );
             }
             else if ( this.scoutingBytes > 1024 )
             {
-                this.state = false;
+                this.active = false;
                 console.warn( "Force-disabling scout mode after a while" );
             }
         }
@@ -1592,7 +1592,7 @@ export class MumeXmlParser
         }
 
         let topTag = this.tagStack.pop();
-        if ( !this.scouting.state )
+        if ( !this.scouting.active )
             $(this).triggerHandler( MumeXmlParser.SIG_TAG_END, [ topTag, ] );
     }
 }
