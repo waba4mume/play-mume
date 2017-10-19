@@ -1255,14 +1255,14 @@ class ScoutingState
     private static readonly START = /^You quietly scout (north|east|south|west|up|down)wards\.\.\.\s*$/m;
     private static readonly STOP = /^You stop scouting\.\s*$/m;
 
-    public update( text: string ): void
+    public pushText( text: string ): void
     {
         let startMatch = text.match( ScoutingState.START );
         if ( startMatch )
         {
             let startIndex = startMatch.index;
-            if ( startIndex === undefined )
-                startIndex = text.indexOf( "You quietly scout" ); // Shouldn't happen, but it does keep TS happy
+            if ( startIndex === undefined ) // Shouldn't happen, but it does keep TS happy
+                startIndex = text.indexOf( "You quietly scout" );
             this.scoutingBytes = text.length - ( startIndex + startMatch[0].length );
 
             this.active = true;
@@ -1282,6 +1282,16 @@ class ScoutingState
                 this.active = false;
                 console.warn( "Force-disabling scout mode after a while" );
             }
+        }
+    }
+
+    public endTag( tag: MumeXmlParserTag ): void
+    {
+        if ( this.active && tag.name === "movement" )
+        {
+            // This typically happens when scouting a oneway
+            this.active = false;
+            console.log( "Aborting scout because of movement" );
         }
     }
 };
@@ -1520,7 +1530,7 @@ export class MumeXmlParser
         let text = MumeXmlParser.decodeEntities( raw );
         let topTag = this.topTag();
 
-        this.scouting.update( text );
+        this.scouting.pushText( text );
 
         if ( !topTag || topTag.name === "xml" )
         {
@@ -1591,7 +1601,8 @@ export class MumeXmlParser
             // fall through
         }
 
-        let topTag = this.tagStack.pop();
+        let topTag = <MumeXmlParserTag>this.tagStack.pop();
+        this.scouting.endTag( topTag );
         if ( !this.scouting.active )
             $(this).triggerHandler( MumeXmlParser.SIG_TAG_END, [ topTag, ] );
     }
