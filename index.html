@@ -7,35 +7,7 @@
     <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/mud-colors.css" />
     <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/decafmud.css" />
     <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/decafmud-dark.css" />
-    <script type="text/javascript">
-        var globalErrorHandlerWasHit = false;
-
-        /*
-        // Log the error in the Apache logs with a dummy URL
-        window.onerror = function (msg, file_loc, line_no, col_no) {
-            col_no = (typeof col_no === "undefined") ? "" : col_no;
-            var url = '/mume/play/jserror'
-                + '?at=' + encodeURIComponent(file_loc + ":" + line_no + ":" + col_no)
-                + "&msg=" + encodeURIComponent(msg);
-            var xhr = new XMLHttpRequest();
-            xhr.open('GET', url, true);
-            xhr.send(null);
-            if (!globalErrorHandlerWasHit) {
-                alert("Oops! Something went really wrong.\n"
-                    +"\n"
-                    +"Please make sure that you are using a supported browser "
-                    +"(up-to-date Chrome or Firefox; IE 10 and later).\n"
-                    +"\n"
-                    +"For other cases: the error was logged and will hopefully be fixed... "
-                    +"Nag Waba if he didn't notice it!\n"
-                    +"\n"
-                    +"Technical details: " + msg);
-            }
-            globalErrorHandlerWasHit = true;
-            return false;
-        }
-        */
-    </script>
+    <script src="errorhandler.js" type="text/javascript"></script>
     <script src="libs/jquery-3.2.1.js" type="text/javascript"></script>
     <script src="../DecafMUD/src/js/decafmud.js" type="text/javascript"></script>
     <script src="../DecafMUD/src/js/decafmud.display.standard.js" type="text/javascript"></script>
