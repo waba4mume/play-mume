@@ -1040,9 +1040,7 @@ class MumeMapDisplay
         return result;
     }
 
-    /* Installs the viewport into the DOM and starts loading textures etc (assets).
-     * The loading continues in background, after which buildMapDisplay() is
-     * called. */
+    /* Installs the viewport into the DOM. */
     public installMap( containerElementName: string ): void
     {
         this.pixi = new PIXI.Application( { autoStart: false, } );
