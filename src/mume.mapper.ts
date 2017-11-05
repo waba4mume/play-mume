@@ -1011,9 +1011,8 @@ class MumeMapDisplay
 
     // PIXI elements
     private herePointer: PIXI.DisplayObject;
-    private stage: PIXI.Container;
     private layers: Array<PIXI.Container> = [];
-    private renderer: PIXI.SystemRenderer;
+    private pixi: PIXI.Application;
 
     // Use load() instead if the assets might not have been loaded yet.
     constructor( containerElementName: string, mapData: MumeMapData )
@@ -1046,16 +1045,14 @@ class MumeMapDisplay
      * called. */
     public installMap( containerElementName: string ): void
     {
-        // Set the Pixi viewport as the content of that new window
-        this.stage = new PIXI.Container();
-        this.renderer = PIXI.autoDetectRenderer( 800, 600 );
-        this.renderer.backgroundColor = 0x6e6e6e;
+        this.pixi = new PIXI.Application( { autoStart: false, } );
+        this.pixi.renderer.backgroundColor = 0x6e6e6e;
 
         let stub = document.getElementById( containerElementName );
         if ( stub == null || stub.parentElement == null )
-            $( "body" ).append( this.renderer.view );
+            $( "body" ).append( this.pixi.renderer.view );
         else
-            stub.parentElement.replaceChild( this.renderer.view, stub );
+            stub.parentElement.replaceChild( this.pixi.renderer.view, stub );
     }
 
     /* Called when all assets are available. Constructs the graphical structure
@@ -1081,7 +1078,7 @@ class MumeMapDisplay
         map.addChild( this.herePointer );
 
         // And set the stage
-        this.stage.addChild( map );
+        this.pixi.stage.addChild( map );
         this.refresh();
 
         return;
@@ -1153,7 +1150,7 @@ class MumeMapDisplay
             {
                 layer.visible = true;
                 layer.scale.set( 0.8, 0.8 );
-                if ( this.renderer.type === PIXI.RENDERER_TYPE.WEBGL )
+                if ( this.pixi.renderer.type === PIXI.RENDERER_TYPE.WEBGL )
                 {
                     let filter = new PIXI.filters.ColorMatrixFilter();
                     filter.brightness( 0.4, false );
@@ -1192,11 +1189,11 @@ class MumeMapDisplay
 
         // Scroll to make the herePointer visible
         let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
-        this.stage.x += - pointerGlobalPos.x + 400;
-        this.stage.y += - pointerGlobalPos.y + 300;
+        this.pixi.stage.x += - pointerGlobalPos.x + 400;
+        this.pixi.stage.y += - pointerGlobalPos.y + 300;
         console.log( "Recentering view to (r) %O", where );
         /*console.log( "herePointer.position=%O, stage.position=%O",
-            this.herePointer.position, this.stage.position );*/
+            this.herePointer.position, this.pixi.stage.position );*/
 
         let coordinates: Array<RoomCoords> = this.roomCoordsNear( where );
         let result = this.mapData.getRoomsAt( coordinates )
@@ -1221,7 +1218,7 @@ class MumeMapDisplay
 
     public refresh(): void
     {
-        this.renderer.render( this.stage );
+        this.pixi.render();
     }
 }
 
