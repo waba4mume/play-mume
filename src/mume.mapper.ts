@@ -535,13 +535,13 @@ class MumeMapData
         jQuery.getJSON( MAP_DATA_PATH + "arda.json" )
             .done( ( json: MapMetaData ) =>
             {
-                console.log( "Map metadata loaded" );
-                let map: MumeMapData;
                 try {
                     result.resolve( new MumeMapData( json ) );
+                    console.log( "Map metadata loaded" );
                 }
                 catch ( e )
                 {
+                    console.error( "Loading metadata failed: %O", e );
                     result.reject();
                 }
             } )
