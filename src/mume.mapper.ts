@@ -1223,14 +1223,7 @@ class MumeMapDisplay
         this.herePointer.visible = true;
 
         this.repositionLayers( where );
-
-        // Scroll to make the herePointer visible
-        let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
-        this.pixi.stage.x += - pointerGlobalPos.x + 400;
-        this.pixi.stage.y += - pointerGlobalPos.y + 300;
         console.log( "Recentering view to (r) %O", where );
-        /*console.log( "herePointer.position=%O, stage.position=%O",
-            this.herePointer.position, this.pixi.stage.position );*/
 
         let coordinates: Array<RoomCoords> = this.roomCoordsNear( where );
         let result = this.mapData.getRoomsAt( coordinates )
@@ -1255,6 +1248,13 @@ class MumeMapDisplay
 
     public refresh(): void
     {
+        // Scroll to make the herePointer visible
+        let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
+        this.pixi.stage.x += - pointerGlobalPos.x + this.pixi.renderer.width / 2;
+        this.pixi.stage.y += - pointerGlobalPos.y + this.pixi.renderer.height / 2;
+        /*console.log( "herePointer.position=%O, stage.position=%O",
+            this.herePointer.position, this.pixi.stage.position );*/
+
         this.pixi.render();
     }
 }
