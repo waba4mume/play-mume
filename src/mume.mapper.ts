@@ -124,11 +124,7 @@ export class MumeMap
 
     public onMovement( event: never, where: RoomCoords ): void
     {
-        this.display.repositionHere( where ).done( () =>
-        {
-            console.log("refreshing the display");
-            this.display.refresh();
-        } );
+        this.display.repositionTo( where );
     }
 }
 
@@ -1007,9 +1003,10 @@ namespace Mm2Gfx
 class MumeMapDisplay
 {
     private mapData: MumeMapData;
-    private roomDisplays: SpatialIndex<PIXI.Container>;
+    private here: RoomCoords | undefined;
 
     // PIXI elements
+    private roomDisplays: SpatialIndex<PIXI.Container>;
     private herePointer: PIXI.DisplayObject;
     private layers: Array<PIXI.Container> = [];
     private pixi: PIXI.Application;
@@ -1063,10 +1060,8 @@ class MumeMapDisplay
         }
 
         let canvasParent = $( this.pixi.renderer.view.parentElement );
-        if ( !canvasParent.is( ":visible" ) )
-            return false;
 
-        if ( canvasParent.width() && canvasParent.height() )
+        if ( canvasParent.is( ":visible" ) && canvasParent.width() && canvasParent.height() )
         {
             let width  = <number>canvasParent.width();
             let height = <number>canvasParent.height();
@@ -1081,15 +1076,20 @@ class MumeMapDisplay
             height = Math.floor( height ) - 3;
 
             this.pixi.renderer.resize( width, height );
-            this.refresh();
-
-            return true;
+            this.fullRefresh();
         }
         else
         {
-            console.warn( "PIXI canvas' parent has no dimension?" );
-            return false;
+            this.pixi.renderer.resize( 0, 0 );
         }
+
+        return true;
+    }
+
+    public isVisible(): boolean
+    {
+        let visible = this.pixi.renderer.width > 0 && this.pixi.renderer.height > 0;
+        return visible;
     }
 
     /* Called when all assets are available. Constructs the graphical structure
@@ -1116,7 +1116,7 @@ class MumeMapDisplay
 
         // And set the stage
         this.pixi.stage.addChild( map );
-        this.refresh();
+        this.pixi.render();
 
         return;
     }
@@ -1215,18 +1215,31 @@ class MumeMapDisplay
     }
 
     /* Repositions the HerePointer (yellow square), centers the view, and fetches
-     * nearby rooms for Pixi. Does not refresh the view.
+     * nearby rooms for Pixi. Refreshes the view once done.
      */
-    public repositionHere( where: RoomCoords ): JQueryPromise<Array<Room>>
+    public repositionTo( where: RoomCoords ): void
     {
+        this.here = where;
+
+        if ( !this.isVisible() )
+            return;
+
+        console.log( "Recentering view to (r) %O", where );
+
         this.herePointer.position = new PIXI.Point( where.x * ROOM_PIXELS, where.y * ROOM_PIXELS );
         this.herePointer.visible = true;
 
         this.repositionLayers( where );
-        console.log( "Recentering view to (r) %O", where );
+
+        // Scroll to make the herePointer visible
+        let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
+        this.pixi.stage.x += - pointerGlobalPos.x + this.pixi.renderer.width / 2;
+        this.pixi.stage.y += - pointerGlobalPos.y + this.pixi.renderer.height / 2;
+        /*console.log( "herePointer.position=%O, stage.position=%O",
+            this.herePointer.position, this.pixi.stage.position );*/
 
         let coordinates: Array<RoomCoords> = this.roomCoordsNear( where );
-        let result = this.mapData.getRoomsAt( coordinates )
+        let background = this.mapData.getRoomsAt( coordinates )
             .progress( ( rooms: Array<Room> ) =>
             {
                 console.log( "repositionHere progress, %d rooms", rooms.length );
@@ -1243,19 +1256,17 @@ class MumeMapDisplay
                 }
             } );
 
-        return result;
+        background.done( () => this.pixi.render() );
     }
 
-    public refresh(): void
+    /* Update all graphical elements to match the current position, going as
+     * far as fetching rooms if needed. */
+    public fullRefresh()
     {
-        // Scroll to make the herePointer visible
-        let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
-        this.pixi.stage.x += - pointerGlobalPos.x + this.pixi.renderer.width / 2;
-        this.pixi.stage.y += - pointerGlobalPos.y + this.pixi.renderer.height / 2;
-        /*console.log( "herePointer.position=%O, stage.position=%O",
-            this.herePointer.position, this.pixi.stage.position );*/
-
-        this.pixi.render();
+        if ( this.here != null )
+            this.repositionTo( this.here );
+        else
+            console.warn( "ignoring MumeMapDisplay.fullRefresh(): no position known" );
     }
 }
 

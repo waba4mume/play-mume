@@ -73,6 +73,8 @@
             Split(["#mume-client-panel", "#mume-map-panel"], {
                 sizes: [75, 25], // in %
                 cursor: 'col-resize',
+                snapOffset: 100,
+                minSize: 0,
                 elementStyle: function ( dimension, size, gutterSize ) {
                     return {
                         'flex-basis': 'calc(' + size + '% - ' + gutterSize + 'px)'
