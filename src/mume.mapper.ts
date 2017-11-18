@@ -1044,6 +1044,7 @@ class MumeMapDisplay
     public installMap( containerElementName: string ): void
     {
         this.pixi = new PIXI.Application( { autoStart: false, } );
+        this.pixi.renderer.autoResize = true;
         this.pixi.renderer.backgroundColor = 0x6e6e6e;
 
         let stub = document.getElementById( containerElementName );
@@ -1051,6 +1052,44 @@ class MumeMapDisplay
             $( "body" ).append( this.pixi.renderer.view );
         else
             stub.parentElement.replaceChild( this.pixi.renderer.view, stub );
+    }
+
+    public fitParent(): boolean
+    {
+        if ( this.pixi.renderer.view.parentElement == null )
+        {
+            console.warn( "PIXI canvas has no parent element?" );
+            return false;
+        }
+
+        let canvasParent = $( this.pixi.renderer.view.parentElement );
+        if ( !canvasParent.is( ":visible" ) )
+            return false;
+
+        if ( canvasParent.width() && canvasParent.height() )
+        {
+            let width  = <number>canvasParent.width();
+            let height = <number>canvasParent.height();
+
+            // Non-integers may cause the other dimension to unexpectedly
+            // increase. 535.983,520 => 535.983,520.95, then rounded up to the
+            // nearest integer, causing scrollbars.
+            // Furthermore, in FF 52 ESR (at least), the actual height of the
+            // canvas seems to be a few px more than reported by the Dev Tools,
+            // causing scrollbars again.
+            width = Math.floor( width );
+            height = Math.floor( height ) - 3;
+
+            this.pixi.renderer.resize( width, height );
+            this.refresh();
+
+            return true;
+        }
+        else
+        {
+            console.warn( "PIXI canvas' parent has no dimension?" );
+            return false;
+        }
     }
 
     /* Called when all assets are available. Constructs the graphical structure

@@ -1,0 +1,38 @@
+.gutter {
+    background-color: #888;
+    background-repeat: no-repeat;
+    background-position: 50%;
+}
+
+.gutter.gutter-horizontal {
+    background-image:  url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAeCAYAAADkftS9AAAAIklEQVQoU2M4c+bMfxAGAgYYmwGrIIiDjrELjpo5aiZeMwF+yNnOs5KSvgAAAABJRU5ErkJggg==');
+    cursor: col-resize;
+}
+
+.split {
+    box-sizing: border-box;
+}
+
+#mume-app {
+    display: flex;
+    flex-direction: row;
+}
+
+.decafmud.interface {
+    height: 100vh; /* full-height app instead of the fixed 450px */
+    border: none; /* default 1px causes a body scrollbar */
+}
+
+#mume-map-panel {
+    height: 100vh; /* avoid canvas delayed resize increasing this size past visible window */
+    min-width: 0px; /* allow downsizing once the canvas' CSS size is set by PIXI */
+}
+
+#mume-map-panel canvas {
+    width: 100%; /* allow resizing */
+    margin: auto; /* try to center the canvas vert. if it's not exactly fitted. */
+}
+
+body {
+    padding-bottom: 0; /* Override DecafMUD, not sure what it was for, but it was causing scrolling */
+}

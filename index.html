@@ -7,8 +7,13 @@
     <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/mud-colors.css" />
     <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/decafmud.css" />
     <link rel="stylesheet" type="text/css" href="../DecafMUD/src/css/decafmud-dark.css" />
+    <link rel="stylesheet" type="text/css" href="play.css" />
     <script src="errorhandler.js" type="text/javascript"></script>
     <script src="libs/jquery-3.2.1.js" type="text/javascript"></script>
+    <script src="libs/jquery.ba-throttle-debounce.min.js" type="text/javascript"></script>
+    <script src="libs/split.min.js" type="text/javascript"></script>
+    <script src="libs/pixi.js" type="text/javascript"></script>
+    <script src="libs/spark-md5.min.js" type="text/javascript"></script>
     <script src="../DecafMUD/src/js/decafmud.js" type="text/javascript"></script>
     <script src="../DecafMUD/src/js/decafmud.display.standard.js" type="text/javascript"></script>
     <script src="../DecafMUD/src/js/decafmud.encoding.iso885915.js" type="text/javascript"></script>
@@ -23,6 +28,7 @@
     <script src="built/mume.mapper.js" type="text/javascript"></script>
     <script type="text/javascript">
         window.onload = function() {
+            var globalMap, canvasFitParent;
             DecafMUD.plugins.TextInputFilter.mumexml = Mapper.MumeXmlParser;
 
             new DecafMUD({
@@ -48,7 +54,7 @@
                     container    : "#mume-client",
                     connect_hint : false,
                     repeat_input : false,
-                    start_full   : true
+                    start_full   : false
                 },
 
                 language : 'en', // circumvent the language buggy autoloader
@@ -57,12 +63,65 @@
                 socket: "websocket"
 
             });
+
+            canvasFitParent = function()
+            {
+                if ( globalMap != undefined )
+                    globalMap.display.fitParent();
+            };
+
+            Split(["#mume-client-panel", "#mume-map-panel"], {
+                sizes: [75, 25], // in %
+                cursor: 'col-resize',
+                elementStyle: function ( dimension, size, gutterSize ) {
+                    return {
+                        'flex-basis': 'calc(' + size + '% - ' + gutterSize + 'px)'
+                    }
+                },
+                gutterStyle: function ( dimension, gutterSize ) {
+                    return {
+                        'flex-basis':  gutterSize + 'px'
+                    }
+                },
+                onDragEnd: canvasFitParent,
+            });
+
+            Mapper.MumeMap.load( "mume-map" ).done( function ( map )
+            {
+                var parser, tagEventHandler;
+
+                parser = DecafMUD.instances[0].textInputFilter;
+                if ( !( parser.isMumeXmlParser ) )
+                {
+                    throw "Bug: expected to find a MumeXmlParser installed as "
+                        +"DecafMUD input text filter, found: " + typeof parser + " "
+                        +"(possible cause: textinputfilter DecafMUD option not set to "
+                        +"'mumexml'.";
+                }
+
+                tagEventHandler = map.processTag.bind( map );
+                $( parser ).on( Mapper.MumeXmlParser.SIG_TAG_END, tagEventHandler );
+
+                console.log( "The map widget will now receive parsing events" );
+
+                globalMap = map;
+
+                $( window ).on( 'resize', $.throttle( 500, canvasFitParent ) );
+                canvasFitParent();
+            } );
         };
     </script>
 </head>
 <body>
-    <div id="mume-client">
-        <noscript>You would be able to play MUME from within your browser if you had Javascript enabled.</noscript>
+    <div id="mume-app">
+        <div id="mume-client-panel" class="split">
+            <div id="mume-client">
+                <noscript>You would be able to play MUME from within your browser if you had Javascript enabled.</noscript>
+            </div>
+        </div>
+        <div id="mume-map-panel" class="split">
+            <div id="mume-map"></div>
+        </div>
     </div>
 </body>
 </html>
