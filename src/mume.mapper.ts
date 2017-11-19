@@ -1121,6 +1121,37 @@ class MumeMapDisplay
         return;
     }
 
+    private static dumpContainer( indent: number, name: string, what: PIXI.DisplayObject ): void
+    {
+        let indentStr = "";
+        while ( indent-- )
+            indentStr += "  ";
+
+        console.log( "%s%s: @%d,%d x=b=%d y=c=%d tx=%d ty=%d",
+            indentStr, name,
+            what.x, what.y,
+            what.worldTransform.b, what.worldTransform.c,
+            what.worldTransform.tx, what.worldTransform.ty );
+    }
+
+    public dumpAllCoords(): void
+    {
+        MumeMapDisplay.dumpContainer( 0, "stage", this.pixi.stage );
+
+        let mapDO = this.pixi.stage.children[0];
+
+        if ( !( mapDO instanceof PIXI.Container ) )
+            return;
+        let map: PIXI.Container = mapDO;
+
+        MumeMapDisplay.dumpContainer( 1, "map", map );
+        for ( let i = 0; i < map.children.length; ++i )
+        {
+            let name = ( i == map.children.length - 1 ) ? "herePointer" : "layer";
+            MumeMapDisplay.dumpContainer( 2, name, map.children[i] );
+        }
+    }
+
     private roomCoordsToPoint( where: RoomCoords): PIXI.Point
     {
         return new PIXI.Point( where.x * ROOM_PIXELS, where.y * ROOM_PIXELS );
@@ -1232,13 +1263,15 @@ class MumeMapDisplay
         this.repositionLayers( where );
 
         // Scroll to make the herePointer visible
-        let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
-        this.pixi.stage.x += - pointerGlobalPos.x + this.pixi.screen.width / 2;
-        this.pixi.stage.y += - pointerGlobalPos.y + this.pixi.screen.height / 2;
-        /*console.log( "herePointer.position=%O, stage.position=%O",
-            this.herePointer.position, this.pixi.stage.position );*/
+        const hpPos = this.herePointer.position;
+        this.pixi.stage.x = - hpPos.x + this.pixi.screen.width / 2;
+        this.pixi.stage.y = - hpPos.y + this.pixi.screen.height / 2;
+        // PIXI.CanvasRenderer doesn't seem to update the stage's transform
+        // correctly (not all all, lagging, plain wrong, pick one). This forces
+        // a working update.
+        this.pixi.stage.toGlobal( new PIXI.Point( 0, 0 ) );
 
-        let coordinates: Array<RoomCoords> = this.roomCoordsNear( where );
+        const coordinates: Array<RoomCoords> = this.roomCoordsNear( where );
         let background = this.mapData.getRoomsAt( coordinates )
             .progress( ( rooms: Array<Room> ) =>
             {
