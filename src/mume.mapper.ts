@@ -1088,7 +1088,7 @@ class MumeMapDisplay
 
     public isVisible(): boolean
     {
-        let visible = this.pixi.renderer.width > 0 && this.pixi.renderer.height > 0;
+        let visible = this.pixi.screen.width > 0 && this.pixi.screen.height > 0;
         return visible;
     }
 
@@ -1233,8 +1233,8 @@ class MumeMapDisplay
 
         // Scroll to make the herePointer visible
         let pointerGlobalPos = this.herePointer.toGlobal( new PIXI.Point( 0, 0 ) );
-        this.pixi.stage.x += - pointerGlobalPos.x + this.pixi.renderer.width / 2;
-        this.pixi.stage.y += - pointerGlobalPos.y + this.pixi.renderer.height / 2;
+        this.pixi.stage.x += - pointerGlobalPos.x + this.pixi.screen.width / 2;
+        this.pixi.stage.y += - pointerGlobalPos.y + this.pixi.screen.height / 2;
         /*console.log( "herePointer.position=%O, stage.position=%O",
             this.herePointer.position, this.pixi.stage.position );*/
 
