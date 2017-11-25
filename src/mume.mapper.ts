@@ -87,7 +87,7 @@ export class MumeMap
     public mapIndex: MumeMapIndex | null = null;
     public display: MumeMapDisplay;
     public pathMachine: MumePathMachine;
-    public processTag: ( event: never, tag: MumeXmlParserTag ) => void;
+    public processTag: ( event: any, tag: MumeXmlParserTag ) => void;
     public static debugInstance: MumeMap;
 
     constructor( mapData: MumeMapData, display: MumeMapDisplay )
@@ -97,7 +97,7 @@ export class MumeMap
         this.mapIndex = new MumeMapIndex();
         this.pathMachine = new MumePathMachine( this.mapData, this.mapIndex );
         this.processTag =
-            ( event: never, tag: MumeXmlParserTag ) => this.pathMachine.processTag( event, tag );
+            ( event: any, tag: MumeXmlParserTag ) => this.pathMachine.processTag( event, tag );
 
         MumeMap.debugInstance = this;
     }
@@ -113,7 +113,7 @@ export class MumeMap
 
                 $( map.pathMachine ).on(
                     MumePathMachine.SIG_MOVEMENT,
-                    ( event: never, where: RoomCoords ) => map.onMovement( event, where ) );
+                    ( event, where ) => map.onMovement( event, where ) );
 
                 result.resolve( map );
             } );
@@ -122,7 +122,7 @@ export class MumeMap
         return result;
     }
 
-    public onMovement( event: never, where: RoomCoords ): void
+    public onMovement( event: any, where: RoomCoords ): void
     {
         this.display.repositionTo( where );
     }
@@ -152,7 +152,7 @@ class MumePathMachine
 
     /* This receives an event from MumeXmlParser when it encounters a closing tag.
      * */
-    public processTag( event: never, tag: MumeXmlParserTag ): void
+    public processTag( event: any, tag: MumeXmlParserTag ): void
     {
         console.log( "MumePathMachine processes tag " + tag.name );
         if ( tag.name === "name" )
@@ -916,19 +916,21 @@ namespace Mm2Gfx
         let borders = new PIXI.Graphics();
         borders.lineStyle( 2, 0x000000, 1 );
 
-        [   // direction MD entry, start coords, end coords
-            [ Dir.NORTH, 0, 0, ROOM_PIXELS, 0 ],
-            [ Dir.EAST,  ROOM_PIXELS, 0, ROOM_PIXELS, ROOM_PIXELS ],
-            [ Dir.SOUTH, ROOM_PIXELS, ROOM_PIXELS, 0, ROOM_PIXELS ],
-            [ Dir.WEST,  0, ROOM_PIXELS, 0, 0 ]
-        ].forEach( function( border: [Dir, number, number, number, number] )
+        let borderSpec = [
+            { dir: Dir.NORTH, x0: 0,           y0: 0,           x1: ROOM_PIXELS, y1: 0           },
+            { dir: Dir.EAST,  x0: ROOM_PIXELS, y0: 0,           x1: ROOM_PIXELS, y1: ROOM_PIXELS },
+            { dir: Dir.SOUTH, x0: ROOM_PIXELS, y0: ROOM_PIXELS, x1: 0,           y1: ROOM_PIXELS },
+            { dir: Dir.WEST,  x0: 0,           y0: ROOM_PIXELS, x1: 0,           y1: 0           },
+        ];
+
+        for ( let spec of borderSpec )
         {
-            if ( room.data.exits[ border[0] ].out.length === 0 )
+            if ( room.data.exits[ spec.dir ].out.length === 0 )
             {
-                borders.moveTo( border[1], border[2] );
-                borders.lineTo( border[3], border[4] );
+                borders.moveTo( spec.x0, spec.y0 );
+                borders.lineTo( spec.x1, spec.y1 );
             }
-        } );
+        };
 
         return borders;
     }
