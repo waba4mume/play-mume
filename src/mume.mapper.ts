@@ -1001,6 +1001,19 @@ namespace Mm2Gfx
 
         return square;
     }
+
+    export function buildInitialHint(): PIXI.Text
+    {
+        let text = new PIXI.Text(
+            "Enter Arda to see a map here",
+            {
+                fontFamily : 'Arial', fontSize: 24, fill : 'white', align : 'center',
+                wordWrap: true, wordWrapWidth: 400,
+                dropShadow: true, dropShadowBlur: 5, dropShadowDistance: 0,
+            } );
+
+        return text;
+    }
 }
 
 /* Renders mapData into a DOM placeholder identified by containerElementName.
@@ -1015,6 +1028,7 @@ class MumeMapDisplay
     private herePointer: PIXI.DisplayObject;
     private layers: Array<PIXI.Container> = [];
     private pixi: PIXI.Application;
+    private initialHint: PIXI.Text;
 
     // Use load() instead if the assets might not have been loaded yet.
     constructor( containerElementName: string, mapData: MumeMapData )
@@ -1118,6 +1132,10 @@ class MumeMapDisplay
         this.herePointer = Mm2Gfx.buildHerePointer();
         this.herePointer.visible = false;
         map.addChild( this.herePointer );
+
+        // Add a hint for new users instead of a blank grey panel
+        this.initialHint = Mm2Gfx.buildInitialHint();
+        this.pixi.stage.addChild( this.initialHint );
 
         // And set the stage
         this.pixi.stage.addChild( map );
@@ -1256,6 +1274,7 @@ class MumeMapDisplay
     public repositionTo( where: RoomCoords ): void
     {
         this.here = where;
+        this.initialHint.visible = false;
 
         if ( !this.isVisible() )
             return;
@@ -1297,12 +1316,28 @@ class MumeMapDisplay
         background.done( () => this.pixi.render() );
     }
 
+    private reshapeInitialHint(): void
+    {
+        this.initialHint.style.wordWrapWidth = this.pixi.renderer.width - 40;
+
+        let hintSize = this.initialHint.getLocalBounds();
+        this.initialHint.pivot.x = hintSize.width / 2;
+        this.initialHint.pivot.y = hintSize.height / 2;
+
+        this.initialHint.x = this.pixi.renderer.width / 2;
+        this.initialHint.y = this.pixi.renderer.height / 2;
+
+        this.pixi.render();
+    }
+
     /* Update all graphical elements to match the current position, going as
      * far as fetching rooms if needed. */
     public fullRefresh()
     {
         if ( this.here != null )
             this.repositionTo( this.here );
+        else if ( this.initialHint.visible )
+            this.reshapeInitialHint();
         else
             console.warn( "ignoring MumeMapDisplay.fullRefresh(): no position known" );
     }
