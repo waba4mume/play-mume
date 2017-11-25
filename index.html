@@ -29,7 +29,7 @@
     <script type="text/javascript">
         var globalMapWindow, globalSplit, globalMap, canvasFitParent;
 
-        window.onload = function() {
+        $( window ).on( "load", function() {
             DecafMUD.plugins.TextInputFilter.mumexml = Mapper.MumeXmlParser;
 
             new DecafMUD({
@@ -118,7 +118,13 @@
                 $( window ).on( 'resize', $.throttle( 500, canvasFitParent ) );
                 canvasFitParent();
             } );
-        };
+        } );
+
+        $( window ).on( "unload", function( e )
+        {
+            if ( globalMapWindow != undefined )
+                globalMapWindow.close();
+        } );
     </script>
 </head>
 <body>
