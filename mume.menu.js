@@ -40,5 +40,8 @@ function open_mume_map_window()
     }
 
     if ( globalSplit )
+    {
         globalSplit.collapse( 1 );
+        canvasFitParent();
+    }
 }

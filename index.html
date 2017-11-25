@@ -27,10 +27,9 @@
     <script src="mume.menu.js" type="text/javascript"></script>
     <script src="built/mume.mapper.js" type="text/javascript"></script>
     <script type="text/javascript">
-        var globalMapWindow, globalSplit, globalMap;
+        var globalMapWindow, globalSplit, globalMap, canvasFitParent;
 
         window.onload = function() {
-            var canvasFitParent;
             DecafMUD.plugins.TextInputFilter.mumexml = Mapper.MumeXmlParser;
 
             new DecafMUD({
