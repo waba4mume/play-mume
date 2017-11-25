@@ -1074,9 +1074,9 @@ class MumeMapDisplay
             // nearest integer, causing scrollbars.
             // Furthermore, in FF 52 ESR (at least), the actual height of the
             // canvas seems to be a few px more than reported by the Dev Tools,
-            // causing scrollbars again.
+            // causing scrollbars again. Same issue in Chromium 62 for the map window.
             width = Math.floor( width );
-            height = Math.floor( height ) - 3;
+            height = Math.floor( height ) - 4;
 
             this.pixi.renderer.resize( width, height );
             this.fullRefresh();

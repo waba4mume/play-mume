@@ -1,10 +1,12 @@
 <!DOCTYPE html>
-<html>
+<html class="no-scroll">
 <head>
     <title>MUME map</title>
+    <link rel="stylesheet" type="text/css" href="play.css" />
     <script src="errorhandler.js" type="text/javascript"></script>
     <script src="libs/pixi.js" type="text/javascript"></script>
     <script src="libs/jquery-3.2.1.js" type="text/javascript"></script>
+    <script src="libs/jquery.ba-throttle-debounce.min.js" type="text/javascript"></script>
     <script src="libs/spark-md5.min.js" type="text/javascript"></script>
     <script src="built/mume.mapper.js" type="text/javascript"></script>
     <script type="text/javascript">
@@ -15,7 +17,7 @@
 
             $( window ).on( "load", function( e )
             {
-                Mapper.MumeMap.load( "map" ).done( function( map )
+                Mapper.MumeMap.load( "mume-map" ).done( function( map )
                 {
                     var parser, matches;
 
@@ -39,6 +41,9 @@
 
                     if ( matches = /^#(\d+),(\d+),(\d+)$/.exec( location.hash ) )
                         map.onMovement( null, new Mapper.RoomCoords( +matches[1], +matches[2], +matches[3] ) );
+
+                    map.display.fitParent();
+                    $( window ).on( "resize", $.throttle( 500, map.display.fitParent.bind( map.display ) ) );
                 } );
             } );
 
@@ -53,7 +58,9 @@
     </script>
 </head>
 <body>
-    <div id="map">
+    <div id="mume-map-panel">
+        <div id="mume-map">
+        </div>
     </div>
 </body>
 </html>

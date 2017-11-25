@@ -36,3 +36,11 @@
 body {
     padding-bottom: 0; /* Override DecafMUD, not sure what it was for, but it was causing scrolling */
 }
+
+html.no-scroll, html.no-scroll body {
+    height: 100vh;
+    min-height: 100vh;
+    max-height: 100vh;
+    padding: 0;
+    margin: 0;
+}
