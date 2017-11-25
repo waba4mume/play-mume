@@ -140,12 +140,14 @@ class MumePathMachine
     public mapData: MumeMapData;
     public mapIndex: MumeMapIndex;
     public roomName: string | null;
+    public here: RoomCoords | null;
 
     constructor( mapData: MumeMapData, mapIndex: MumeMapIndex )
     {
         this.mapData = mapData;
         this.mapIndex = mapIndex;
         this.roomName = null;
+        this.here = null;
     }
 
     /* This receives an event from MumeXmlParser when it encounters a closing tag.
@@ -180,6 +182,7 @@ class MumePathMachine
         this.mapIndex.findPosByNameDesc( name, desc )
             .done( ( coordinates: Array<RoomCoords> ) =>
             {
+                this.here = coordinates[0];
                 $(this).triggerHandler( MumePathMachine.SIG_MOVEMENT, [ coordinates[0] ] );
             } );
     }
@@ -354,7 +357,7 @@ class ZeroedRoomCoords
 }
 
 /* Room coordinates, comprised in metaData.minX .. maxX etc. */
-class RoomCoords
+export class RoomCoords
 {
     private preventDuckTyping: never;
 

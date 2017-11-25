@@ -17,7 +17,7 @@
             {
                 Mapper.MumeMap.load( "map" ).done( function( map )
                 {
-                    var parser;
+                    var parser, matches;
 
                     parser = window.opener.DecafMUD.instances[0].textInputFilter;
                     if ( !( parser.isMumeXmlParser ) )
@@ -36,6 +36,9 @@
                     window.opener.$( parser ).on( Mapper.MumeXmlParser.SIG_TAG_END, tagEventHandler );
 
                     console.log( "The main window will now send data to the map window" );
+
+                    if ( matches = /^#(\d+),(\d+),(\d+)$/.exec( location.hash ) )
+                        map.onMovement( null, new Mapper.RoomCoords( +matches[1], +matches[2], +matches[3] ) );
                 } );
             } );
 

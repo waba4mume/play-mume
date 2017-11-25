@@ -23,7 +23,14 @@ function mume_menu_rules()
 
 function open_mume_map_window()
 {
-    globalMapWindow = window.open( "map.html", "mume_map", "dialog,minimizable,width=820,height=620" );
+    var where, url;
+    if ( globalMap && globalMap.pathMachine.here )
+        where = globalMap.pathMachine.here.x + "," +
+            globalMap.pathMachine.here.y + "," +
+            globalMap.pathMachine.here.z;
+
+    url = where ? "map.html#" + where : "map.html";
+    globalMapWindow = window.open( url, "mume_map", "dialog,minimizable,width=820,height=620" );
     if ( globalMapWindow === null )
     {
         alert( "Your browser refused to open the map window, you have to allow it "
