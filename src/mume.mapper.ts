@@ -832,6 +832,9 @@ namespace Mm2Gfx
 
     function getSectorAssetPath( sector: number ): string
     {
+        if ( sector < Sector.UNDEFINED || sector >= Sector.COUNT )
+            sector = Sector.UNDEFINED;
+
         return "resources/pixmaps/terrain" + sector + ".png";
     }
 
