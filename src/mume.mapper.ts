@@ -935,6 +935,48 @@ namespace Mm2Gfx
         return borders;
     }
 
+    function buildUpExit( room: Room ): PIXI.DisplayObject | null
+    {
+        if ( room.data.exits[ Dir.UP ].out.length === 0 )
+            return null;
+
+        let exit = new PIXI.Graphics();
+        exit.lineStyle( 1, 0x000000, 1 );
+
+        exit.beginFill( 0xffffff, 1 );
+        exit.drawCircle( ROOM_PIXELS * 0.75, ROOM_PIXELS * 0.25, ROOM_PIXELS / 8 );
+        exit.endFill();
+
+        exit.drawCircle( ROOM_PIXELS * 0.75, ROOM_PIXELS * 0.25, 1 );
+
+        return exit;
+    }
+
+    function buildDownExit( room: Room ): PIXI.DisplayObject | null
+    {
+        if ( room.data.exits[ Dir.DOWN ].out.length === 0 )
+            return null;
+
+        const radius = ROOM_PIXELS / 8;
+        const crossCoord = Math.sin( Math.PI / 4 ) * radius;
+        const centerX = ROOM_PIXELS * 0.25;
+        const centerY = ROOM_PIXELS * 0.75;
+
+        let exit = new PIXI.Graphics();
+        exit.lineStyle( 1, 0x000000, 1 );
+
+        exit.beginFill( 0xffffff, 1 );
+        exit.drawCircle( centerX, centerY, radius );
+        exit.endFill();
+
+        exit.moveTo( centerX - crossCoord, centerY - crossCoord );
+        exit.lineTo( centerX + crossCoord, centerY + crossCoord );
+        exit.moveTo( centerX - crossCoord, centerY + crossCoord );
+        exit.lineTo( centerX + crossCoord, centerY - crossCoord );
+
+        return exit;
+    }
+
     function buildRoomExtra( room: Room, kind: ExtraKind ) : PIXI.DisplayObject | null
     {
         const flagsCount = (kind === "load" ? LOAD_FLAGS : MOB_FLAGS );
@@ -972,6 +1014,8 @@ namespace Mm2Gfx
 
         display.addChild( buildRoomSector( room ) );
         display.addChild( buildRoomBorders( room ) );
+        maybeAddChild( display, buildUpExit( room ) );
+        maybeAddChild( display, buildDownExit( room ) );
         maybeAddChild( display, buildRoomExtra( room, "mob" ) );
         maybeAddChild( display, buildRoomExtra( room, "load" ) );
 
