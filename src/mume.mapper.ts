@@ -1185,7 +1185,7 @@ class MumeMapDisplay
         let map = new PIXI.Container();
 
         // Rooms live on layers, there is one layer per z coord
-        for ( let i = 0; i < this.mapData.metaData.maxZ - this.mapData.metaData.minZ; ++i )
+        for ( let i = this.mapData.metaData.minZ; i <= this.mapData.metaData.maxZ; ++i )
         {
             let layer = new PIXI.Container();
             this.layers.push( layer );
