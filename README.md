@@ -144,8 +144,8 @@ streams (such as Telnet for MUDs) inside HTTP(S).
 ### Javascript (Client-Side) Configuration
 
 `index.html` configures the DecafMUD Javascript code to connect to
-`https://test.waba.be/mume/play/websocket` with these settings:
-- `host` set to `test.waba.be`
+`https://waba.be/mume/play/websocket` with these settings:
+- `host` set to `waba.be`
 - `set_socket.wspath` set to `/mume/play/websocket`
 - `set_socket.wsport` set to 443 (`*`)
 - `set_socket.ssl` set to true (`*`)
