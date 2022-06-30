@@ -1,3 +1,9 @@
+# Moved
+
+This project moved to [MUME/play-mume](https://github.com/MUME/play-mume).
+
+---
+
 # Play MUME!
 
 A modern web client for MUME using DecafMUD.
